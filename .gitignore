@@ -1,29 +1,30 @@
-# OS
+# ===== OS / Editor =====
 .DS_Store
 Thumbs.db
-
-# Node
-node_modules/
-npm-debug.log*
-yarn-error.log*
-
-# Build
-dist/
-build/
-
-# Env
-.env
-.env.*
-
-# PHP
-/vendor/
-
-# Logs
-*.log
-
-# IDE
 .vscode/
 .idea/
 
-# XAMPP local
-htdocs/
+# ===== env (DO NOT COMMIT) =====
+.env
+.env.*
+*.local
+
+# ===== Logs =====
+*.log
+
+# ===== Frontend (React) =====
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+frontend/.cache/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# ===== Backend (PHP) =====
+vendor/
+backend/vendor/
+
+# ===== Optional: runtime / cache (if any) =====
+storage/
+tmp/
