@@ -11,7 +11,7 @@
  *  - 未ログインなら 401 を返す
  *  - CORS/セッション/エラー処理は common/cors.php
  *
- * ★重要:
+ * 重要:
  *  - 「社内休日/法定休日は全ユーザー共通」運用のため、更新は locale_type=1/2 両方へ反映する
  */
 
@@ -84,7 +84,7 @@ try {
         ]);
     }
 
-    // ★更新は locale_type=1/2 両方に反映（社内休日は共通運用）
+    // 更新は locale_type=1/2 両方に反映（社内休日は共通運用）
     $targetLocales = [1, 2];
 
     $pdo->beginTransaction();

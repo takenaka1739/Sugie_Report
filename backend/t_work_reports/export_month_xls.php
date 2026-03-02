@@ -23,6 +23,9 @@
  * 現場:
  *  - on_site_id  : 現場1
  *  - on_site_id2 : 現場2（途中で現場が変わるケース）
+ *
+ * ★追加（区間2）:
+ *  - start_time2 / finish_time2 / work2
  */
 
 require_once dirname(__DIR__, 1) . '/common/cors.php';
@@ -217,7 +220,7 @@ try {
     "SELECT id, name AS label FROM m_users",
   ]);
 
-  /** ======= type=user（既存互換） ======= */
+  /** ======= type=user（既存互換 + 区間2列追加） ======= */
   if ($type === 'user') {
     $userId = norm_int($_GET['user_id'] ?? null, 0);
     if ($userId <= 0) {
@@ -279,9 +282,11 @@ try {
     // 日報（入力ある行）
     $stmt = $dbh->prepare("
       SELECT
-        id, user_id, work_date, start_time, finish_time,
+        id, user_id, work_date,
+        start_time, finish_time,
+        start_time2, finish_time2,
         on_site_id, on_site_id2,
-        work,
+        work, work2,
         is_canceled, alcohol_checked, condition_checked,
         vehicle_id,
         payment1_id, amount1,
@@ -319,8 +324,11 @@ try {
 
       $baseMap[$d] = [
         'date'=>$d,'wday'=>$w,'kind'=>$kind,
-        'start'=>'','finish'=>'','canceled'=>'','alcohol'=>'','condition'=>'',
-        'site'=>'','site2'=>'','work'=>'','vehicle'=>'',
+        'start'=>'','finish'=>'','start2'=>'','finish2'=>'',
+        'canceled'=>'','alcohol'=>'','condition'=>'',
+        'site'=>'','site2'=>'',
+        'work'=>'','work2'=>'',
+        'vehicle'=>'',
         'p1'=>'','a1'=>0,'p2'=>'','a2'=>0,'p3'=>'','a3'=>0,'p4'=>'','a4'=>0,'p5'=>'','a5'=>0,
         'sum'=>0,
         'holiday_status'=>(int)($holidayMap[$d] ?? 0),
@@ -336,6 +344,9 @@ try {
 
       $st  = (string)($r['start_time'] ?? '');
       $ft  = (string)($r['finish_time'] ?? '');
+      $st2 = (string)($r['start_time2'] ?? '');
+      $ft2 = (string)($r['finish_time2'] ?? '');
+
       $amt = (int)($r['amount1'] ?? 0)
            + (int)($r['amount2'] ?? 0)
            + (int)($r['amount3'] ?? 0)
@@ -350,7 +361,7 @@ try {
       }
 
       $siteLabel2 = '';
-      if (array_key_exists('on_site_id2', $r) && $r['on_site_id2'] !== null && $r['on_site_id2'] !== '') {
+      if ($r['on_site_id2'] !== null && $r['on_site_id2'] !== '') {
         $sid2 = (int)$r['on_site_id2'];
         $siteLabel2 = $siteMap[$sid2] ?? (string)$r['on_site_id2'];
       }
@@ -368,14 +379,17 @@ try {
       $p5 = ($r['payment5_id'] !== null && $r['payment5_id'] !== '') ? ($paymentMap[(int)$r['payment5_id']] ?? (string)$r['payment5_id']) : '';
 
       $baseMap[$d] = array_merge($baseMap[$d], [
-        'start'  => $st ? substr($st, 0, 5) : '',
-        'finish' => $ft ? substr($ft, 0, 5) : '',
+        'start'   => $st  ? substr($st, 0, 5)  : '',
+        'finish'  => $ft  ? substr($ft, 0, 5)  : '',
+        'start2'  => $st2 ? substr($st2, 0, 5) : '',
+        'finish2' => $ft2 ? substr($ft2, 0, 5) : '',
         'canceled'  => (int)$r['is_canceled'] ? '中止' : '',
         'alcohol'   => (int)$r['alcohol_checked'] ? '済' : '',
         'condition' => (int)$r['condition_checked'] ? '済' : '',
         'site'      => $siteLabel,
         'site2'     => $siteLabel2,
         'work'      => (string)($r['work'] ?? ''),
+        'work2'     => (string)($r['work2'] ?? ''),
         'vehicle'   => $vehicleLabel,
         'p1'=>$p1,'a1'=>(int)($r['amount1'] ?? 0),
         'p2'=>$p2,'a2'=>(int)($r['amount2'] ?? 0),
@@ -398,20 +412,35 @@ try {
 
       $title = sprintf('作業日報（%s / %s）', $userName, $ym);
       $sheet->setCellValue('A1', $title);
-      $sheet->mergeCells('A1:W1');
-      $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
 
-      // ★ 現場2 追加
+      // ヘッダ列数に合わせて自動で最終列を決める
       $headers = [
-        '日付','曜','区分','出勤','退勤','中止','アルコール','体調',
-        '現場','現場2','作業内容','車両',
+        '日付','曜','区分',
+        '出勤1','退勤1','出勤2','退勤2',
+        '中止','アルコール','体調',
+        '現場1','現場2',
+        '作業内容1','作業内容2',
+        '車両',
         '支払1','金額1','支払2','金額2','支払3','金額3','支払4','金額4','支払5','金額5',
         '合計(円)'
       ];
+      $endCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+      $sheet->mergeCells("A1:{$endCol}1");
+      $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+
       $sheet->fromArray([$headers], null, 'A3', true);
 
-      // 幅（現場2ぶん追加）
-      $widths = [12,5,10,8,8,8,9,8,18,18,28,12, 12,10,12,10,12,10,12,10,12,10, 12];
+      // 幅（増えた列ぶん調整）
+      $widths = [
+        12,5,10,
+        8,8,8,8,
+        8,9,8,
+        18,18,
+        28,28,
+        12,
+        12,10,12,10,12,10,12,10,12,10,
+        12
+      ];
       foreach ($widths as $i => $w) { $sheet->getColumnDimensionByColumn($i+1)->setWidth($w); }
 
       $border = ['borders'=>['allBorders'=>['borderStyle'=>\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,'color'=>['rgb'=>'666666']]]];
@@ -424,35 +453,47 @@ try {
       $rowIdx = 4;
       foreach ($outRows as $r) {
         $sheet->fromArray([[
-          $r['date'], $r['wday'], $r['kind'], $r['start'], $r['finish'], $r['canceled'], $r['alcohol'], $r['condition'],
-          $r['site'], $r['site2'], $r['work'], $r['vehicle'],
+          $r['date'], $r['wday'], $r['kind'],
+          $r['start'], $r['finish'], $r['start2'], $r['finish2'],
+          $r['canceled'], $r['alcohol'], $r['condition'],
+          $r['site'], $r['site2'],
+          $r['work'], $r['work2'],
+          $r['vehicle'],
           $r['p1'], $r['a1'], $r['p2'], $r['a2'], $r['p3'], $r['a3'], $r['p4'], $r['a4'], $r['p5'], $r['a5'],
           $r['sum'],
         ]], null, "A{$rowIdx}", true);
 
+        $range = "A{$rowIdx}:{$endCol}{$rowIdx}";
+
         if (!empty($r['is_paid'])) {
-          $sheet->getStyle("A{$rowIdx}:W{$rowIdx}")->getFill()->applyFromArray($fillPaid);
+          $sheet->getStyle($range)->getFill()->applyFromArray($fillPaid);
         } elseif ($r['holiday_status'] === 1) {
-          $sheet->getStyle("A{$rowIdx}:W{$rowIdx}")->getFill()->applyFromArray($fillHoliday1);
+          $sheet->getStyle($range)->getFill()->applyFromArray($fillHoliday1);
         } elseif ($r['holiday_status'] === 2) {
-          $sheet->getStyle("A{$rowIdx}:W{$rowIdx}")->getFill()->applyFromArray($fillHoliday2);
+          $sheet->getStyle($range)->getFill()->applyFromArray($fillHoliday2);
         }
 
         if ($r['wday'] === '日') $sheet->getStyle("B{$rowIdx}")->applyFromArray($fontSun);
         if ($r['wday'] === '土') $sheet->getStyle("B{$rowIdx}")->applyFromArray($fontSat);
 
-        $sheet->getStyle("A{$rowIdx}:W{$rowIdx}")->applyFromArray($border);
+        $sheet->getStyle($range)->applyFromArray($border);
         $rowIdx++;
       }
 
-      $sheet->getStyle("A3:W3")->applyFromArray($border);
-      $sheet->getStyle("A3:W3")->getFont()->setBold(true);
+      $sheet->getStyle("A3:{$endCol}3")->applyFromArray($border);
+      $sheet->getStyle("A3:{$endCol}3")->getFont()->setBold(true);
 
-      // 合計行（★ 0固定をやめて既存互換に戻す）
+      // 合計行
       $sheet->setCellValue("A{$rowIdx}", '合計');
-      $sheet->mergeCells("A{$rowIdx}:V{$rowIdx}");
-      $sheet->setCellValue("W{$rowIdx}", (int)$sumExpense);
-      $sheet->getStyle("A{$rowIdx}:W{$rowIdx}")->applyFromArray($border);
+      $sumColIdx = count($headers);
+      $sumCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($sumColIdx);
+
+      // 合計は最終列に置く。ラベルは最終列の1つ前までをマージ
+      $mergeEndCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($sumColIdx - 1);
+      $sheet->mergeCells("A{$rowIdx}:{$mergeEndCol}{$rowIdx}");
+      $sheet->setCellValue("{$sumCol}{$rowIdx}", (int)$sumExpense);
+
+      $sheet->getStyle("A{$rowIdx}:{$endCol}{$rowIdx}")->applyFromArray($border);
       $sheet->getStyle("A{$rowIdx}")->getFont()->setBold(true);
 
       $filenameUtf8  = "作業日報_{$safeName}_{$ym}.xlsx";
@@ -491,8 +532,12 @@ try {
 <table>
   <thead>
     <tr>
-      <th>日付</th><th>曜</th><th>区分</th><th>出勤</th><th>退勤</th><th>中止</th><th>アルコール</th><th>体調</th>
-      <th>現場</th><th>現場2</th><th>作業内容</th><th>車両</th>
+      <th>日付</th><th>曜</th><th>区分</th>
+      <th>出勤1</th><th>退勤1</th><th>出勤2</th><th>退勤2</th>
+      <th>中止</th><th>アルコール</th><th>体調</th>
+      <th>現場1</th><th>現場2</th>
+      <th>作業内容1</th><th>作業内容2</th>
+      <th>車両</th>
       <th>支払1</th><th>金額1</th><th>支払2</th><th>金額2</th><th>支払3</th><th>金額3</th><th>支払4</th><th>金額4</th><th>支払5</th><th>金額5</th>
       <th>合計(円)</th>
     </tr>
@@ -504,14 +549,22 @@ try {
       <td><?php echo htmlspecialchars($r['date'], ENT_QUOTES, 'UTF-8'); ?></td>
       <td class="<?php echo $r['wday']==='日'?'sun':($r['wday']==='土'?'sat':''); ?>"><?php echo htmlspecialchars($r['wday'], ENT_QUOTES, 'UTF-8'); ?></td>
       <td><?php echo htmlspecialchars($r['kind'], ENT_QUOTES, 'UTF-8'); ?></td>
+
       <td><?php echo htmlspecialchars($r['start'], ENT_QUOTES, 'UTF-8'); ?></td>
       <td><?php echo htmlspecialchars($r['finish'], ENT_QUOTES, 'UTF-8'); ?></td>
+      <td><?php echo htmlspecialchars($r['start2'], ENT_QUOTES, 'UTF-8'); ?></td>
+      <td><?php echo htmlspecialchars($r['finish2'], ENT_QUOTES, 'UTF-8'); ?></td>
+
       <td><?php echo htmlspecialchars($r['canceled'], ENT_QUOTES, 'UTF-8'); ?></td>
       <td><?php echo htmlspecialchars($r['alcohol'], ENT_QUOTES, 'UTF-8'); ?></td>
       <td><?php echo htmlspecialchars($r['condition'], ENT_QUOTES, 'UTF-8'); ?></td>
+
       <td><?php echo htmlspecialchars($r['site'], ENT_QUOTES, 'UTF-8'); ?></td>
       <td><?php echo htmlspecialchars($r['site2'], ENT_QUOTES, 'UTF-8'); ?></td>
+
       <td><?php echo htmlspecialchars($r['work'], ENT_QUOTES, 'UTF-8'); ?></td>
+      <td><?php echo htmlspecialchars($r['work2'], ENT_QUOTES, 'UTF-8'); ?></td>
+
       <td><?php echo htmlspecialchars($r['vehicle'], ENT_QUOTES, 'UTF-8'); ?></td>
 
       <td><?php echo htmlspecialchars($r['p1'], ENT_QUOTES, 'UTF-8'); ?></td><td><?php echo (int)$r['a1']; ?></td>
@@ -523,7 +576,7 @@ try {
     </tr>
   <?php endforeach; ?>
     <tr>
-      <td colspan="22" style="text-align:right;font-weight:bold;">合計</td>
+      <td colspan="25" style="text-align:right;font-weight:bold;">合計</td>
       <td style="font-weight:bold;"><?php echo (int)$sumExpense; ?></td>
     </tr>
   </tbody>
@@ -573,9 +626,14 @@ try {
 
   if ($type === 'date') {
     // 日付別：その日の全レコードを出す（条件は行単位で判定）
+    // ★区間2も行として扱えるように select に含める
     $stmt = $dbh->prepare("
       SELECT
-        r.work_date, r.user_id, r.on_site_id, r.on_site_id2, r.work, r.start_time, r.finish_time
+        r.work_date, r.user_id,
+        r.on_site_id, r.on_site_id2,
+        r.work, r.work2,
+        r.start_time, r.finish_time,
+        r.start_time2, r.finish_time2
       FROM t_work_reports r
       WHERE r.work_date BETWEEN :f AND :t
       ORDER BY r.work_date ASC, r.on_site_id ASC, r.user_id ASC, r.id ASC
@@ -585,15 +643,13 @@ try {
     $stmt->execute();
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-    // 日付ごとにグループ
+    // 日付ごとにグループ（区間1/2を別行に展開）
     $byDate = [];
     foreach ($rows as $r) {
       $d = (string)$r['work_date'];
       $uid = (int)$r['user_id'];
-      $sid = (int)($r['on_site_id'] ?? 0);
-      $sid2 = (int)($r['on_site_id2'] ?? 0);
 
-      $w = dayjs_wday_ja($d);
+      $w  = dayjs_wday_ja($d);
       $hs = (int)($holidayMap[$d] ?? 0);
 
       // shift
@@ -601,30 +657,62 @@ try {
       $shiftId = (int)($userShiftMap[$uid] ?? 0);
       if ($shiftId > 0) $shiftRow = $shiftMap[$shiftId] ?? null;
 
-      $st = (string)($r['start_time'] ?? '');
-      $ft = (string)($r['finish_time'] ?? '');
-      $st5 = $st ? substr($st,0,5) : '';
-      $ft5 = $ft ? substr($ft,0,5) : '';
-      $ot = calc_ot_midnight_minutes($shiftRow, $st5, $ft5);
+      // 区間1
+      $sid1 = (int)($r['on_site_id'] ?? 0);
+      $st1  = (string)($r['start_time'] ?? '');
+      $ft1  = (string)($r['finish_time'] ?? '');
+      $st1_5 = $st1 ? substr($st1,0,5) : '';
+      $ft1_5 = $ft1 ? substr($ft1,0,5) : '';
+      $ot1 = ($st1_5 && $ft1_5) ? calc_ot_midnight_minutes($shiftRow, $st1_5, $ft1_5) : ['overtime_excl_midnight'=>0,'midnight'=>0];
 
-      $cell = [
+      $cell1 = [
         'holiday_status'=>$hs,
         'wday'=>$w,
-        'overtime_h'=>min_to_hour_int($ot['overtime_excl_midnight']),
-        'midnight_h'=>min_to_hour_int($ot['midnight']),
+        'overtime_h'=>min_to_hour_int($ot1['overtime_excl_midnight'] ?? 0),
+        'midnight_h'=>min_to_hour_int($ot1['midnight'] ?? 0),
       ];
-      if (!cell_matches($cell, $cond, $condMode)) continue;
+      if (cell_matches($cell1, $cond, $condMode)) {
+        $byDate[$d][] = [
+          'date'=>$d,
+          'wday'=>$w,
+          'user'=>$userNameMap[$uid] ?? (string)$uid,
+          'segment'=>'1',
+          'site'=>$siteMap[$sid1] ?? ($sid1 ? (string)$sid1 : ''),
+          'work'=>(string)($r['work'] ?? ''),
+          'start'=>$st1_5,
+          'finish'=>$ft1_5,
+        ];
+      }
 
-      $byDate[$d][] = [
-        'date'=>$d,
-        'wday'=>$w,
-        'user'=>$userNameMap[$uid] ?? (string)$uid,
-        'site'=>$siteMap[$sid] ?? ($sid ? (string)$sid : ''),
-        'site2'=>$siteMap[$sid2] ?? ($sid2 ? (string)$sid2 : ''),
-        'work'=>(string)($r['work'] ?? ''),
-        'start'=>$st5,
-        'finish'=>$ft5,
-      ];
+      // 区間2（入力がある場合のみ）
+      $hasSeg2 = !empty($r['on_site_id2']) || !empty($r['start_time2']) || !empty($r['finish_time2']) || !empty($r['work2']);
+      if ($hasSeg2) {
+        $sid2 = (int)($r['on_site_id2'] ?? 0);
+        $st2  = (string)($r['start_time2'] ?? '');
+        $ft2  = (string)($r['finish_time2'] ?? '');
+        $st2_5 = $st2 ? substr($st2,0,5) : '';
+        $ft2_5 = $ft2 ? substr($ft2,0,5) : '';
+        $ot2 = ($st2_5 && $ft2_5) ? calc_ot_midnight_minutes($shiftRow, $st2_5, $ft2_5) : ['overtime_excl_midnight'=>0,'midnight'=>0];
+
+        $cell2 = [
+          'holiday_status'=>$hs,
+          'wday'=>$w,
+          'overtime_h'=>min_to_hour_int($ot2['overtime_excl_midnight'] ?? 0),
+          'midnight_h'=>min_to_hour_int($ot2['midnight'] ?? 0),
+        ];
+        if (cell_matches($cell2, $cond, $condMode)) {
+          $byDate[$d][] = [
+            'date'=>$d,
+            'wday'=>$w,
+            'user'=>$userNameMap[$uid] ?? (string)$uid,
+            'segment'=>'2',
+            'site'=>$siteMap[$sid2] ?? ($sid2 ? (string)$sid2 : ''),
+            'work'=>(string)($r['work2'] ?? ''),
+            'start'=>$st2_5,
+            'finish'=>$ft2_5,
+          ];
+        }
+      }
     }
 
     if (!hasSpreadsheet()) json_out(500, ['success'=>false,'message'=>'PhpSpreadsheet が必要です（date出力）']);
@@ -647,19 +735,18 @@ try {
       $sheet->getStyle("A{$rIdx}")->getFont()->setBold(true);
       $rIdx++;
 
-      // ★ 現場2追加
-      $sheet->fromArray([['作業者','現場','現場2','作業','出社','退社']], null, "A{$rIdx}", true);
+      $sheet->fromArray([['作業者','区間','現場','作業','出社','退社']], null, "A{$rIdx}", true);
       $sheet->getStyle("A{$rIdx}:F{$rIdx}")->getFont()->setBold(true);
       $rIdx++;
 
       foreach ($list as $x) {
-        $sheet->fromArray([[$x['user'],$x['site'],$x['site2'],$x['work'],$x['start'],$x['finish']]], null, "A{$rIdx}", true);
+        $sheet->fromArray([[$x['user'],$x['segment'],$x['site'],$x['work'],$x['start'],$x['finish']]], null, "A{$rIdx}", true);
         $rIdx++;
       }
       $rIdx++; // 空行
     }
 
-    foreach (['A'=>16,'B'=>18,'C'=>18,'D'=>30,'E'=>10,'F'=>10] as $col=>$w) {
+    foreach (['A'=>16,'B'=>8,'C'=>18,'D'=>30,'E'=>10,'F'=>10] as $col=>$w) {
       $sheet->getColumnDimension($col)->setWidth($w);
     }
 
@@ -679,16 +766,19 @@ try {
     $siteName = $siteMap[$onSiteId] ?? "現場{$onSiteId}";
     $safeSite = sanitize_filename($siteName, "site{$onSiteId}");
 
-    // ★ 既存互換: デフォルトは on_site_id のみ
     // ★ include_site2=1 のときだけ on_site_id2 も拾う
     $whereSite = $includeSite2
       ? "(r.on_site_id = :sid OR r.on_site_id2 = :sid)"
       : "r.on_site_id = :sid";
 
+    // ★区間2のカラムも取得
     $stmt = $dbh->prepare("
       SELECT
-        r.user_id, r.work_date, r.start_time, r.finish_time,
-        r.is_canceled, r.work,
+        r.user_id, r.work_date,
+        r.start_time, r.finish_time,
+        r.start_time2, r.finish_time2,
+        r.is_canceled,
+        r.work, r.work2,
         r.on_site_id, r.on_site_id2
       FROM t_work_reports r
       WHERE {$whereSite}
@@ -716,25 +806,54 @@ try {
       $userShiftRow[(int)$uid] = $shiftMap[(int)$sid] ?? null;
     }
 
-    // work[uid][date] = cell
+    // work[uid][date] = cell（該当区間を合算）
     $work = [];
     foreach ($rows as $r) {
       $uid = (int)$r['user_id'];
       $d = (string)$r['work_date'];
 
-      $st = (string)($r['start_time'] ?? '');
-      $ft = (string)($r['finish_time'] ?? '');
-      $st5 = $st ? substr($st,0,5) : '';
-      $ft5 = $ft ? substr($ft,0,5) : '';
-
       $dt = DateTime::createFromFormat('Y-m-d', $d);
       $w = $dt ? wday_ja($dt) : '';
       $hs = (int)($holidayMap[$d] ?? 0);
 
-      $calc = calc_ot_midnight_minutes($userShiftRow[$uid] ?? null, $st5, $ft5);
-      $totalH = min_to_hour_int($calc['total']);
-      $otH = min_to_hour_int($calc['overtime_excl_midnight']);
-      $midH = min_to_hour_int($calc['midnight']);
+      $totalMin = 0;
+      $otMin    = 0;
+      $midMin   = 0;
+
+      // 区間1が対象か
+      $sid1 = (int)($r['on_site_id'] ?? 0);
+      if ($sid1 === $onSiteId) {
+        $st = (string)($r['start_time'] ?? '');
+        $ft = (string)($r['finish_time'] ?? '');
+        $st5 = $st ? substr($st,0,5) : '';
+        $ft5 = $ft ? substr($ft,0,5) : '';
+        if ($st5 && $ft5) {
+          $calc = calc_ot_midnight_minutes($userShiftRow[$uid] ?? null, $st5, $ft5);
+          $totalMin += (int)($calc['total'] ?? 0);
+          $otMin    += (int)($calc['overtime_excl_midnight'] ?? 0);
+          $midMin   += (int)($calc['midnight'] ?? 0);
+        }
+      }
+
+      // 区間2が対象か（include_site2 のときのみ意味がある）
+      $sid2 = (int)($r['on_site_id2'] ?? 0);
+      if ($includeSite2 && $sid2 === $onSiteId) {
+        $st2 = (string)($r['start_time2'] ?? '');
+        $ft2 = (string)($r['finish_time2'] ?? '');
+        $st2_5 = $st2 ? substr($st2,0,5) : '';
+        $ft2_5 = $ft2 ? substr($ft2,0,5) : '';
+        if ($st2_5 && $ft2_5) {
+          $calc2 = calc_ot_midnight_minutes($userShiftRow[$uid] ?? null, $st2_5, $ft2_5);
+          $totalMin += (int)($calc2['total'] ?? 0);
+          $otMin    += (int)($calc2['overtime_excl_midnight'] ?? 0);
+          $midMin   += (int)($calc2['midnight'] ?? 0);
+        }
+      }
+
+      // 合算結果が0なら skip（ただし条件が無いなら空でも出したい要件があればここを変更）
+      $totalH = min_to_hour_int($totalMin);
+      $otH    = min_to_hour_int($otMin);
+      $midH   = min_to_hour_int($midMin);
 
       $cell = [
         'date'=>$d,
@@ -743,14 +862,18 @@ try {
         'total_h'=>$totalH,
         'overtime_h'=>$otH,
         'midnight_h'=>$midH,
-        'start'=>$st5,
-        'finish'=>$ft5,
       ];
 
-      // 条件フィルタ
       if (!cell_matches($cell, $cond, $condMode)) continue;
 
-      $work[$uid][$d] = $cell;
+      // 同日複数行が来た場合に合算（安全側）
+      if (!isset($work[$uid][$d])) {
+        $work[$uid][$d] = $cell;
+      } else {
+        $work[$uid][$d]['total_h']    += $cell['total_h'];
+        $work[$uid][$d]['overtime_h'] += $cell['overtime_h'];
+        $work[$uid][$d]['midnight_h'] += $cell['midnight_h'];
+      }
     }
 
     // 出力対象ユーザー（セルが1つでもある人だけ）
@@ -809,7 +932,7 @@ try {
         if ($hs === 2) $cntLegal++;
         if ($hs === 1) $cntCompany++;
 
-        $totOT += (int)$cell['overtime_h'];
+        $totOT  += (int)$cell['overtime_h'];
         $totMid += (int)$cell['midnight_h'];
 
         $normal = max(0, (int)$cell['total_h'] - (int)$cell['overtime_h'] - (int)$cell['midnight_h']);

@@ -17,7 +17,11 @@ require_once dirname(__DIR__, 1) . '/common/db_manager.php';
  *
  * レスポンス:
  *   { success:true, total:int, count:int, data:[ {...}, ... ],
- *     has_on_site_id2:0|1, has_is_night_shift:0|1 }
+ *     has_on_site_id2:0|1, has_is_night_shift:0|1,
+ *     has_segment2:0|1 }
+ *
+ * ★追加（区間2）:
+ *   - start_time2, finish_time2, work2
  */
 
 function norm_int($v, $def = 0) {
@@ -89,15 +93,19 @@ try {
     $total = (int)$stCnt->fetchColumn();
 
     // ============================================================
-    // SELECT（on_site_id2 / is_night_shift を「ある前提で試す」→無ければ落とす）
+    // SELECT（on_site_id2 / is_night_shift / 区間2カラム を「ある前提で試す」→無ければ落とす）
     // ============================================================
-    $hasOnSite2 = 1;
-    $hasNight   = 1;
+    $hasOnSite2  = 1;
+    $hasNight    = 1;
+    $hasSegment2 = 1; // start_time2/finish_time2/work2 の有無
 
+    // ★full（全部あり）
     $selectColsFull = [
         'id','user_id','work_date','start_time','finish_time',
+        'start_time2','finish_time2',
         'on_site_id','on_site_id2',
-        'work','is_canceled','alcohol_checked','condition_checked',
+        'work','work2',
+        'is_canceled','alcohol_checked','condition_checked',
         'is_night_shift',
         'vehicle_id',
         'payment1_id','amount1',
@@ -108,11 +116,14 @@ try {
         'created_at','updated_at',
     ];
 
-    // フォールバック1：on_site_id2 無し / is_night_shift あり
+    // ===== フォールバック群 =====
+    // 1) on_site_id2 無し / is_night_shift あり / 区間2あり
     $selectColsNoSite2 = [
         'id','user_id','work_date','start_time','finish_time',
+        'start_time2','finish_time2',
         'on_site_id',
-        'work','is_canceled','alcohol_checked','condition_checked',
+        'work','work2',
+        'is_canceled','alcohol_checked','condition_checked',
         'is_night_shift',
         'vehicle_id',
         'payment1_id','amount1',
@@ -123,11 +134,13 @@ try {
         'created_at','updated_at',
     ];
 
-    // フォールバック2：on_site_id2 あり / is_night_shift 無し
+    // 2) on_site_id2 あり / is_night_shift 無し / 区間2あり
     $selectColsNoNight = [
         'id','user_id','work_date','start_time','finish_time',
+        'start_time2','finish_time2',
         'on_site_id','on_site_id2',
-        'work','is_canceled','alcohol_checked','condition_checked',
+        'work','work2',
+        'is_canceled','alcohol_checked','condition_checked',
         'vehicle_id',
         'payment1_id','amount1',
         'payment2_id','amount2',
@@ -137,11 +150,75 @@ try {
         'created_at','updated_at',
     ];
 
-    // フォールバック3：両方無し
+    // 3) 両方無し / 区間2あり
     $selectColsBase = [
         'id','user_id','work_date','start_time','finish_time',
+        'start_time2','finish_time2',
         'on_site_id',
-        'work','is_canceled','alcohol_checked','condition_checked',
+        'work','work2',
+        'is_canceled','alcohol_checked','condition_checked',
+        'vehicle_id',
+        'payment1_id','amount1',
+        'payment2_id','amount2',
+        'payment3_id','amount3',
+        'payment4_id','amount4',
+        'payment5_id','amount5',
+        'created_at','updated_at',
+    ];
+
+    // 4) 区間2無し / on_site_id2 あり / night あり
+    $selectColsNoSeg2_Full = [
+        'id','user_id','work_date','start_time','finish_time',
+        'on_site_id','on_site_id2',
+        'work',
+        'is_canceled','alcohol_checked','condition_checked',
+        'is_night_shift',
+        'vehicle_id',
+        'payment1_id','amount1',
+        'payment2_id','amount2',
+        'payment3_id','amount3',
+        'payment4_id','amount4',
+        'payment5_id','amount5',
+        'created_at','updated_at',
+    ];
+
+    // 5) 区間2無し / on_site_id2 無し / night あり
+    $selectColsNoSeg2_NoSite2 = [
+        'id','user_id','work_date','start_time','finish_time',
+        'on_site_id',
+        'work',
+        'is_canceled','alcohol_checked','condition_checked',
+        'is_night_shift',
+        'vehicle_id',
+        'payment1_id','amount1',
+        'payment2_id','amount2',
+        'payment3_id','amount3',
+        'payment4_id','amount4',
+        'payment5_id','amount5',
+        'created_at','updated_at',
+    ];
+
+    // 6) 区間2無し / on_site_id2 あり / night 無し
+    $selectColsNoSeg2_NoNight = [
+        'id','user_id','work_date','start_time','finish_time',
+        'on_site_id','on_site_id2',
+        'work',
+        'is_canceled','alcohol_checked','condition_checked',
+        'vehicle_id',
+        'payment1_id','amount1',
+        'payment2_id','amount2',
+        'payment3_id','amount3',
+        'payment4_id','amount4',
+        'payment5_id','amount5',
+        'created_at','updated_at',
+    ];
+
+    // 7) 区間2無し / 両方無し（最小）
+    $selectColsNoSeg2_Base = [
+        'id','user_id','work_date','start_time','finish_time',
+        'on_site_id',
+        'work',
+        'is_canceled','alcohol_checked','condition_checked',
         'vehicle_id',
         'payment1_id','amount1',
         'payment2_id','amount2',
@@ -162,58 +239,81 @@ try {
         ";
     };
 
-    // 1) full 試行
-    try {
-        $sql = $buildSql($selectColsFull);
+    // 実行ヘルパ（tryチェーンを少し簡潔に）
+    $execSelect = function(array $cols) use ($dbh, $buildSql, $params, $limit, $offset) {
+        $sql = $buildSql($cols);
         $stmt = $dbh->prepare($sql);
         foreach ($params as $k => $v) { $stmt->bindValue($k, $v); }
         $stmt->bindValue(':limit',  $limit,  PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    };
+
+    // 1) full 試行（全部あり）
+    try {
+        $rows = $execSelect($selectColsFull);
     } catch (PDOException $e1) {
-        // full が落ちる場合、on_site_id2 か is_night_shift のどちらかが無い可能性
-        // 2) on_site_id2 無し / night あり を試す
+        // ここで落ちる要因：on_site_id2 / is_night_shift / 区間2カラム のいずれか不足
+        // 2) on_site_id2 無し / night あり / 区間2あり
         try {
             $hasOnSite2 = 0;
-            $sql = $buildSql($selectColsNoSite2);
-            $stmt = $dbh->prepare($sql);
-            foreach ($params as $k => $v) { $stmt->bindValue($k, $v); }
-            $stmt->bindValue(':limit',  $limit,  PDO::PARAM_INT);
-            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-            $stmt->execute();
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $rows = $execSelect($selectColsNoSite2);
         } catch (PDOException $e2) {
-            // 3) site2 あり / night 無し を試す
+            // 3) on_site_id2 あり / night 無し / 区間2あり
             try {
                 $hasOnSite2 = 1;
                 $hasNight   = 0;
-                $sql = $buildSql($selectColsNoNight);
-                $stmt = $dbh->prepare($sql);
-                foreach ($params as $k => $v) { $stmt->bindValue($k, $v); }
-                $stmt->bindValue(':limit',  $limit,  PDO::PARAM_INT);
-                $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-                $stmt->execute();
-                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $rows = $execSelect($selectColsNoNight);
             } catch (PDOException $e3) {
-                // 4) 両方無し
-                $hasOnSite2 = 0;
-                $hasNight   = 0;
-                $sql = $buildSql($selectColsBase);
-                $stmt = $dbh->prepare($sql);
-                foreach ($params as $k => $v) { $stmt->bindValue($k, $v); }
-                $stmt->bindValue(':limit',  $limit,  PDO::PARAM_INT);
-                $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-                $stmt->execute();
-                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                // 4) 両方無し / 区間2あり
+                try {
+                    $hasOnSite2 = 0;
+                    $hasNight   = 0;
+                    $rows = $execSelect($selectColsBase);
+                } catch (PDOException $e4) {
+                    // ここまで落ちるなら「区間2カラムが無い」可能性が高いので、区間2無しで再試行
+                    $hasSegment2 = 0;
+
+                    // 5) 区間2無し / on_site_id2 あり / night あり
+                    try {
+                        $hasOnSite2 = 1;
+                        $hasNight   = 1;
+                        $rows = $execSelect($selectColsNoSeg2_Full);
+                    } catch (PDOException $e5) {
+                        // 6) 区間2無し / on_site_id2 無し / night あり
+                        try {
+                            $hasOnSite2 = 0;
+                            $hasNight   = 1;
+                            $rows = $execSelect($selectColsNoSeg2_NoSite2);
+                        } catch (PDOException $e6) {
+                            // 7) 区間2無し / on_site_id2 あり / night 無し
+                            try {
+                                $hasOnSite2 = 1;
+                                $hasNight   = 0;
+                                $rows = $execSelect($selectColsNoSeg2_NoNight);
+                            } catch (PDOException $e7) {
+                                // 8) 区間2無し / 両方無し
+                                $hasOnSite2 = 0;
+                                $hasNight   = 0;
+                                $rows = $execSelect($selectColsNoSeg2_Base);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 
-    // ★フロント安定のため：無い場合もキーは必ず返す
+    // フロント安定のため：無い場合もキーは必ず返す
     foreach ($rows as &$r) {
         if (!array_key_exists('on_site_id2', $r)) $r['on_site_id2'] = null;
         if (!array_key_exists('is_night_shift', $r)) $r['is_night_shift'] = 0;
+
+        // ★区間2（無い場合は必ず空扱いにする）
+        if (!array_key_exists('start_time2', $r)) $r['start_time2'] = null;
+        if (!array_key_exists('finish_time2', $r)) $r['finish_time2'] = null;
+        if (!array_key_exists('work2', $r)) $r['work2'] = '';
     }
     unset($r);
 
@@ -225,6 +325,7 @@ try {
         'data'    => $rows,
         'has_on_site_id2'       => (int)$hasOnSite2,
         'has_is_night_shift'    => (int)$hasNight,
+        'has_segment2'          => (int)$hasSegment2,
     ], JSON_UNESCAPED_UNICODE);
 
 } catch (PDOException $e) {

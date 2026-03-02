@@ -8,12 +8,15 @@
  * GET:
  *   - ym=YYYY-MM            … 対象月（未指定は当月）
  *   - include_admin=1       … 管理者も含める（既定は除外）
- *   - round=0|15|30         … 分丸め（0=丸めなし／既定0）※実働/各時間を同じ単位で丸め
+ *   - round=0|15|30         … 分丸め（0=丸めなし／既定0）
+ *                             ※実働/各時間を同じ単位で丸め（区間ごとに丸めてから合算）
  *
  * 参照テーブル:
  *   t_work_reports(
- *     id, user_id, work_date, start_time, finish_time,
- *     on_site_id, work, is_canceled,
+ *     id, user_id, work_date,
+ *     start_time, finish_time,
+ *     start_time2, finish_time2,
+ *     is_canceled,
  *     payment1_id, amount1, ... payment5_id, amount5
  *   )
  *   m_users(id, name, is_authorized, shift_id)
@@ -49,17 +52,23 @@ function hm_to_min(?string $s): ?int {
     [$h,$m] = array_map('intval', explode(':', $s));
     return $h*60 + $m;
 }
-/** 早出/残業/深夜を算出。特別ルール：出社が17:00以降なら全時間=深夜 */
+
+/**
+ * 早出/残業/深夜を算出（分）
+ * 特別ルール：出社が17:00以降なら全時間=深夜
+ * 戻り: [early, overtime, midnight]
+ */
 function calc_parts(?array $shiftRow, ?string $start, ?string $finish): array {
     $st = hm_to_min($start);
     $ft = hm_to_min($finish);
-    if ($st === null || $ft === null) return [0,0,0]; // early, overtime, midnight
+    if ($st === null || $ft === null) return [0,0,0];
     if ($ft <= $st) $ft += 24*60;
 
     // 17:00ルール
     if ($st >= 17*60) {
         return [0, 0, $ft - $st];
     }
+
     $mReg  = isset($shiftRow['regular_start'])       ? hm_to_min($shiftRow['regular_start'])       : null;
     $mOT   = isset($shiftRow['overtime_start'])      ? hm_to_min($shiftRow['overtime_start'])      : null;
     $mLate = isset($shiftRow['late_overtime_start']) ? hm_to_min($shiftRow['late_overtime_start']) : null;
@@ -69,6 +78,23 @@ function calc_parts(?array $shiftRow, ?string $start, ?string $finish): array {
     $midnight = ($mLate!== null && $ft > $mLate) ? max(0, $ft - max($st, $mLate)) : 0;
 
     return [$early, $overtime, $midnight];
+}
+
+/** 実働（分）。日跨ぎ対応。 */
+function calc_worked_minutes(?string $workDate, ?string $start, ?string $finish): int {
+    if (!$workDate || !$start || !$finish) return 0;
+    $s5 = substr((string)$start, 0, 5);
+    $f5 = substr((string)$finish, 0, 5);
+    if (!preg_match('/^\d{2}:\d{2}$/', $s5) || !preg_match('/^\d{2}:\d{2}$/', $f5)) return 0;
+
+    $baseStart  = strtotime($workDate.' '.$s5);
+    $baseFinish = strtotime($workDate.' '.$f5);
+    if ($baseStart === false || $baseFinish === false) return 0;
+
+    if ($baseFinish <= $baseStart) $baseFinish += 24*60*60;
+    $diff = ($baseFinish - $baseStart)/60;
+    if (!is_finite($diff) || $diff <= 0) return 0;
+    return (int)$diff;
 }
 
 try {
@@ -120,8 +146,12 @@ try {
     // ===== 当月の全レコード =====
     $inUserIds = implode(',', array_map('intval', array_column($users, 'id')));
     $sql = "
-        SELECT user_id, work_date, start_time, finish_time, is_canceled,
-               payment1_id, amount1, payment2_id, amount2, payment3_id, amount3, payment4_id, amount4, payment5_id, amount5
+        SELECT
+            id, user_id, work_date,
+            start_time, finish_time,
+            start_time2, finish_time2,
+            is_canceled,
+            payment1_id, amount1, payment2_id, amount2, payment3_id, amount3, payment4_id, amount4, payment5_id, amount5
           FROM t_work_reports
          WHERE user_id IN ($inUserIds)
            AND work_date BETWEEN :df AND :dt
@@ -159,10 +189,14 @@ try {
         }
     }
 
-    // ===== 集計（月合計のみ。キーは氏名で出力） =====
-    $summary = [];   // user_id => {...}
+    // ===== 集計（月合計のみ） =====
+    $summary = [];           // user_id => {...}
+    $countedDay = [];        // user_id => [work_date=>true]  日数重複防止（同日に複数行がある可能性を潰す）
+
     foreach ($rows as $r) {
         $uid = (int)$r['user_id'];
+        $wd  = (string)($r['work_date'] ?? '');
+
         if (!isset($summary[$uid])) {
             $payCols = [];
             foreach ($paymentIds as $pid) $payCols[$pid] = 0;
@@ -175,46 +209,55 @@ try {
                 'overtime_min'=> 0,
                 'midnight_min'=> 0,
             ], ['payments'=>$payCols]);
+
+            $countedDay[$uid] = [];
         }
 
         $isCanceled = (int)($r['is_canceled'] ?? 0);
-        $stt = (string)($r['start_time'] ?? '');
-        $fin = (string)($r['finish_time'] ?? '');
 
-        // 出社日数：中止でなく、出勤・退勤が両方ある日
-        if (!$isCanceled && $stt !== '' && $fin !== '') {
-            $summary[$uid]['days']++;
-        }
-
-        // 実働分
-        $workedMin = 0;
-        if (!$isCanceled && $stt !== '' && $fin !== '') {
-            $baseStart = strtotime($r['work_date'].' '.substr($stt,0,5));
-            $baseFinish= strtotime($r['work_date'].' '.substr($fin,0,5));
-            if ($baseFinish <= $baseStart) $baseFinish += 24*60*60;
-            $diff = ($baseFinish - $baseStart)/60;
-            if (is_finite($diff) && $diff > 0) $workedMin = (int)$diff;
-        }
-
-        // シフト時間（早出/残業/深夜）
-        $shiftId = $userShiftId[$uid] ?? 0;
+        // シフト
+        $shiftId  = (int)($userShiftId[$uid] ?? 0);
         $shiftRow = $shiftId ? ($shiftMap[$shiftId] ?? null) : null;
-        [$earlyMin, $otMin, $lateMin] = calc_parts($shiftRow, $stt, $fin);
 
-        // 丸め
-        if ($roundUnit > 0) {
-            $workedMin = round_minutes($workedMin, $roundUnit);
-            $earlyMin  = round_minutes($earlyMin,  $roundUnit);
-            $otMin     = round_minutes($otMin,     $roundUnit);
-            $lateMin   = round_minutes($lateMin,   $roundUnit);
+        // ===== 出社日数（日単位で1。区間1/2を合算して判定） =====
+        if (!$isCanceled && $wd !== '' && empty($countedDay[$uid][$wd])) {
+            $seg1ok = !empty($r['start_time'])  && !empty($r['finish_time']);
+            $seg2ok = !empty($r['start_time2']) && !empty($r['finish_time2']);
+            if ($seg1ok || $seg2ok) {
+                $summary[$uid]['days']++;
+                $countedDay[$uid][$wd] = true;
+            }
         }
 
-        $summary[$uid]['worked_min']   += $workedMin;
-        $summary[$uid]['early_min']    += $earlyMin;
-        $summary[$uid]['overtime_min'] += $otMin;
-        $summary[$uid]['midnight_min'] += $lateMin;
+        // ===== 実働（区間1+区間2） =====
+        $worked1 = (!$isCanceled) ? calc_worked_minutes($wd, (string)($r['start_time'] ?? ''),  (string)($r['finish_time'] ?? '')) : 0;
+        $worked2 = (!$isCanceled) ? calc_worked_minutes($wd, (string)($r['start_time2'] ?? ''), (string)($r['finish_time2'] ?? '')) : 0;
 
-        // 立替種類ごとの合計
+        // ===== 早出/残業/深夜（区間ごと） =====
+        [$early1, $ot1, $mid1] = (!$isCanceled) ? calc_parts($shiftRow, (string)($r['start_time'] ?? ''),  (string)($r['finish_time'] ?? '')) : [0,0,0];
+        [$early2, $ot2, $mid2] = (!$isCanceled) ? calc_parts($shiftRow, (string)($r['start_time2'] ?? ''), (string)($r['finish_time2'] ?? '')) : [0,0,0];
+
+        // ===== 丸め（区間ごとに丸めてから合算） =====
+        if ($roundUnit > 0) {
+            $worked1 = round_minutes($worked1, $roundUnit);
+            $worked2 = round_minutes($worked2, $roundUnit);
+
+            $early1  = round_minutes($early1,  $roundUnit);
+            $early2  = round_minutes($early2,  $roundUnit);
+
+            $ot1     = round_minutes($ot1,     $roundUnit);
+            $ot2     = round_minutes($ot2,     $roundUnit);
+
+            $mid1    = round_minutes($mid1,    $roundUnit);
+            $mid2    = round_minutes($mid2,    $roundUnit);
+        }
+
+        $summary[$uid]['worked_min']   += ($worked1 + $worked2);
+        $summary[$uid]['early_min']    += ($early1  + $early2);
+        $summary[$uid]['overtime_min'] += ($ot1     + $ot2);
+        $summary[$uid]['midnight_min'] += ($mid1    + $mid2);
+
+        // ===== 立替種類ごとの合計 =====
         for ($i=1;$i<=5;$i++) {
             $pid = $r["payment{$i}_id"] ?? null;
             $amt = (int)($r["amount{$i}"] ?? 0);
@@ -249,6 +292,7 @@ try {
         $rIdx = 4;
         $sumDays=0; $sumWorked=0; $sumEarly=0; $sumOT=0; $sumMid=0;
         $sumPay = array_fill_keys($paymentIds, 0);
+
         foreach ($summary as $uid => $u) {
             $row = [
                 $u['name'],
@@ -272,6 +316,7 @@ try {
             $sumOT     += (int)$u['overtime_min'];
             $sumMid    += (int)$u['midnight_min'];
         }
+
         // 合計行
         $sumRow = ['合計', $sumDays, round($sumWorked/60,2), round($sumEarly/60,2), round($sumOT/60,2), round($sumMid/60,2)];
         foreach ($paymentIds as $pid) $sumRow[] = (int)$sumPay[$pid];

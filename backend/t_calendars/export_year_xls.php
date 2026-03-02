@@ -106,7 +106,7 @@ try {
             $sheet->getStyle("A1")->getFont()->setBold(true)->setSize(14);
             $sheet->getStyle("A1")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
 
-            // ★ 凡例（A2 に表示、見出しと同幅で結合）
+            //  凡例（A2 に表示、見出しと同幅で結合）
             $legendRt = new \PhpOffice\PhpSpreadsheet\RichText\RichText();
             $legendRt->createText('赤塗：法定休日　青塗：社内休日　');
             $runRed = $legendRt->createTextRun('赤字');
@@ -214,7 +214,7 @@ try {
 </head>
 <body>
   <div class="sheet-title">日本人（<?php echo (int)$year; ?>年）</div>
-  <!-- ★ 凡例（年タイトルの一つ下の行に相当） -->
+  <!--  凡例（年タイトルの一つ下の行に相当） -->
   <div class="legend">赤塗：法定休日　青塗：社内休日　<span class="sunTxt">赤字</span>：日曜　<span class="satTxt">青字</span>：土曜</div>
   <<div style="height:22px;"></div>
 
@@ -228,7 +228,7 @@ try {
   </div>
 
   <div class="sheet-title">外国人（<?php echo (int)$year; ?>年）</div>
-  <!-- ★ 凡例 -->
+  <!--  凡例 -->
   <div class="legend">赤塗：法定休日　青塗：社内休日　<span class="sunTxt">赤字</span>：日曜　<span class="satTxt">青字</span>：土曜</div>
   <div style="height:22px;"></div>
 

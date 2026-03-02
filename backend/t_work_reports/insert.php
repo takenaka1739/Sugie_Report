@@ -79,6 +79,12 @@ try {
     // 任意
     $start_time        = norm_time_or_null($in['start_time'] ?? null);
     $finish_time       = norm_time_or_null($in['finish_time'] ?? null);
+
+    // ★追加：区間2（時間・現場）
+    $start_time2       = norm_time_or_null($in['start_time2'] ?? null);
+    $finish_time2      = norm_time_or_null($in['finish_time2'] ?? null);
+    $work2             = norm_work_string($in['work2'] ?? '');
+
     $is_canceled       = norm_bool01($in['is_canceled'] ?? 0);
     $alcohol_checked   = norm_bool01($in['alcohol_checked'] ?? 0);
     $condition_checked = norm_bool01($in['condition_checked'] ?? 0);
@@ -103,9 +109,11 @@ try {
     $sql = "
         INSERT INTO t_work_reports (
             user_id, work_date,
-            start_time, finish_time, is_canceled,
+            start_time, finish_time,
+            start_time2, finish_time2,
+            is_canceled,
             alcohol_checked, condition_checked, is_night_shift,
-            on_site_id, on_site_id2, work,
+            on_site_id, on_site_id2, work, work2,
             vehicle_id,
             payment1_id, amount1,
             payment2_id, amount2,
@@ -115,9 +123,11 @@ try {
             created_at, updated_at
         ) VALUES (
             :user_id, :work_date,
-            :start_time, :finish_time, :is_canceled,
+            :start_time, :finish_time,
+            :start_time2, :finish_time2,
+            :is_canceled,
             :alcohol_checked, :condition_checked, :is_night_shift,
-            :on_site_id, :on_site_id2, :work,
+            :on_site_id, :on_site_id2, :work, :work2,
             :vehicle_id,
             :payment1_id, :amount1,
             :payment2_id, :amount2,
@@ -129,6 +139,8 @@ try {
         ON DUPLICATE KEY UPDATE
             start_time = VALUES(start_time),
             finish_time = VALUES(finish_time),
+            start_time2 = VALUES(start_time2),
+            finish_time2 = VALUES(finish_time2),
             is_canceled = VALUES(is_canceled),
             alcohol_checked = VALUES(alcohol_checked),
             condition_checked = VALUES(condition_checked),
@@ -136,6 +148,7 @@ try {
             on_site_id = VALUES(on_site_id),
             on_site_id2 = VALUES(on_site_id2),
             work = VALUES(work),
+            work2 = VALUES(work2),
             vehicle_id = VALUES(vehicle_id),
             payment1_id = VALUES(payment1_id),
             amount1 = VALUES(amount1),
@@ -160,6 +173,13 @@ try {
     if ($finish_time === null) { $stmt->bindValue(':finish_time', null, PDO::PARAM_NULL); }
     else { $stmt->bindValue(':finish_time', $finish_time, PDO::PARAM_STR); }
 
+    // ★追加：区間2 時間
+    if ($start_time2 === null) { $stmt->bindValue(':start_time2', null, PDO::PARAM_NULL); }
+    else { $stmt->bindValue(':start_time2', $start_time2, PDO::PARAM_STR); }
+
+    if ($finish_time2 === null) { $stmt->bindValue(':finish_time2', null, PDO::PARAM_NULL); }
+    else { $stmt->bindValue(':finish_time2', $finish_time2, PDO::PARAM_STR); }
+
     $stmt->bindValue(':is_canceled', $is_canceled, PDO::PARAM_INT);
     $stmt->bindValue(':alcohol_checked', $alcohol_checked, PDO::PARAM_INT);
     $stmt->bindValue(':condition_checked', $condition_checked, PDO::PARAM_INT);
@@ -172,6 +192,8 @@ try {
     else { $stmt->bindValue(':on_site_id2', $on_site_id2, PDO::PARAM_INT); }
 
     $stmt->bindValue(':work', $work, PDO::PARAM_STR);
+    // ★追加：区間2 現場
+    $stmt->bindValue(':work2', $work2, PDO::PARAM_STR);
 
     if ($vehicle_id === null) { $stmt->bindValue(':vehicle_id', null, PDO::PARAM_NULL); }
     else { $stmt->bindValue(':vehicle_id', $vehicle_id, PDO::PARAM_INT); }

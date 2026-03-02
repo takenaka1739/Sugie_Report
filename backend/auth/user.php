@@ -47,7 +47,7 @@ $ALLOWED = [
 if ($reqOrigin && in_array($reqOrigin, $ALLOWED, true)) {
     header('Access-Control-Allow-Origin: '.$reqOrigin);
 } else {
-    // ★ デフォルトは本番ドメインに変更（localhost 固定だと不一致になる）
+    //  デフォルトは本番ドメインに変更（localhost 固定だと不一致になる）
     header('Access-Control-Allow-Origin: http://www.sugie-k.com');
 }
 header('Access-Control-Allow-Credentials: true');
@@ -68,7 +68,7 @@ if (session_status() === PHP_SESSION_NONE) {
     $cookieParams = session_get_cookie_params();
     $newCookieParams = [
         'lifetime' => 0,
-        'path'     => '/report', // ★ 小文字に統一（本番配下に合わせる）
+        'path'     => '/report', //  小文字に統一（本番配下に合わせる）
         'domain'   => $cookieParams['domain'] ?? '',
         'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on'),
         'httponly' => true,
