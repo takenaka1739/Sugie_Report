@@ -13,7 +13,7 @@ try {
     $stmt->execute();
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $basename = '現場マスタ_' . date('Ymd_His') . '.xls';
+    $basename = '営業所マスタ_' . date('Ymd_His') . '.xls';
     // RFC 5987 による UTF-8 日本語ファイル名（ブラウザ互換）
     $disposition = 'attachment; filename="' . $basename . '"; filename*=UTF-8\'\'' . rawurlencode($basename);
 
@@ -29,7 +29,7 @@ try {
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<title>現場マスタ エクスポート</title>
+<title>営業所マスタ エクスポート</title>
 <style>
   table { border-collapse: collapse; }
   th, td { border: 1px solid #666; padding: 4px 6px; }

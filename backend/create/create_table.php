@@ -28,7 +28,7 @@
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='車両';";
         $dbh->query($sql);
 
-        // 現場マスタ
+        // 営業所マスタ
         $sql = "CREATE TABLE IF NOT EXISTS m_on_sites (
             id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '管理ID',
             name VARCHAR(50) NOT NULL DEFAULT '現場' COMMENT '現場名',
