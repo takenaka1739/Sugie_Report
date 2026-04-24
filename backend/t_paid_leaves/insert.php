@@ -2,7 +2,6 @@
 /**
  * t_paid_leaves への登録API
  * - 年度上限: 12日
- * - 過去日は申請不可
  * - 登録成功時: m_users.paid_holidays_num を 1 減らす
  */
 require_once dirname(__DIR__, 1) . '/common/db_manager.php';
@@ -65,14 +64,6 @@ try {
     if (!$dt || $dtErrors['warning_count'] > 0 || $dtErrors['error_count'] > 0) {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'leave_date が不正な日付です'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    // 過去日は不可
-    $today = new DateTime('today');
-    if ($dt < $today) {
-        http_response_code(409);
-        echo json_encode(['success' => false, 'message' => '過去日は申請できません'], JSON_UNESCAPED_UNICODE);
         exit;
     }
 

@@ -118,19 +118,6 @@ try {
         $stUp->execute();
     }
 
-    if (function_exists('__api_log')) {
-        __api_log([
-            'phase' => 'CAL_UPDATE_OK',
-            'mode'  => $hasStatus ? 'set' : 'toggle',
-            'the_date' => $theDate,
-            'request_locale_type' => $localeType,
-            'updated_locales' => $targetLocales,
-            'before' => $before,
-            'status' => $next,
-            'updated_by_user_id' => (int)$userId
-        ]);
-    }
-
     $pdo->commit();
     json_out(200, ['ok' => true, 'status' => $next]);
 

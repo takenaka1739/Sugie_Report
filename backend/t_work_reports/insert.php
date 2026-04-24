@@ -5,6 +5,7 @@
 require_once dirname(__DIR__, 1) . '/common/cors.php';
 // DB
 require_once dirname(__DIR__, 1) . '/common/db_manager.php';
+require_once dirname(__DIR__, 1) . '/common/mail_notifications.php';
 
 function norm_int_or_null($v) {
     if ($v === '' || $v === null || !isset($v)) return null;
@@ -104,6 +105,13 @@ try {
     $amount4     = norm_int_or_null($in['amount4'] ?? null);
     $payment5_id = norm_int_or_null($in['payment5_id'] ?? null);
     $amount5     = norm_int_or_null($in['amount5'] ?? null);
+
+    $beforeStmt = $dbh->prepare("SELECT * FROM t_work_reports WHERE user_id = :user_id AND work_date = :work_date LIMIT 1");
+    $beforeStmt->bindValue(':user_id', $user_id, PDO::PARAM_INT);
+    $beforeStmt->bindValue(':work_date', $work_date, PDO::PARAM_STR);
+    $beforeStmt->execute();
+    $beforeReport = $beforeStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    $isNew = empty($beforeReport);
 
     // Upsert（user_id + work_date が一意）
     $sql = "
@@ -221,6 +229,13 @@ try {
       $stmt2->execute();
       $row = $stmt2->fetch(PDO::FETCH_ASSOC);
       $insertId = $row ? (int)$row['id'] : 0;
+    }
+
+    try {
+        $afterReport = fetchWorkReportNotificationRow($dbh, $user_id, $work_date);
+        notifyWorkReportReimburseChange($dbh, $user_id, $work_date, $beforeReport, $afterReport, $isNew);
+    } catch (Throwable $mailError) {
+        error_log('[t_work_reports/insert notify] ' . $mailError->getMessage());
     }
 
     header('Content-Type: application/json; charset=utf-8');

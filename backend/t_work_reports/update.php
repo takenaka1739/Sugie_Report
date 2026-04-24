@@ -3,6 +3,7 @@
 
 require_once dirname(__DIR__, 1) . '/common/cors.php';
 require_once dirname(__DIR__, 1) . '/common/db_manager.php';
+require_once dirname(__DIR__, 1) . '/common/mail_notifications.php';
 
 /**
  * POST /backend/t_work_reports/update.php
@@ -187,11 +188,30 @@ try {
     if ($id) {
         $where = 'id = :_id';
         $params[':_id'] = (int)$id;
+        $whereParams = [':_id' => (int)$id];
     } else {
         $where = 'user_id = :_uid AND work_date = :_date';
         $params[':_uid']  = (int)$user_id;
         $params[':_date'] = $work_date;
+        $whereParams = [
+            ':_uid' => (int)$user_id,
+            ':_date' => $work_date,
+        ];
     }
+
+    $beforeSql = "SELECT * FROM t_work_reports WHERE {$where} LIMIT 1";
+    $beforeStmt = $dbh->prepare($beforeSql);
+    foreach ($whereParams as $k => $v) {
+        if ($v === null) {
+            $beforeStmt->bindValue($k, null, PDO::PARAM_NULL);
+        } elseif (is_int($v)) {
+            $beforeStmt->bindValue($k, $v, PDO::PARAM_INT);
+        } else {
+            $beforeStmt->bindValue($k, (string)$v, PDO::PARAM_STR);
+        }
+    }
+    $beforeStmt->execute();
+    $beforeReport = $beforeStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
     $sql = "
         UPDATE t_work_reports
@@ -215,6 +235,17 @@ try {
 
     $stmt->execute();
     $affected = $stmt->rowCount();
+
+    if ($affected > 0 && !empty($beforeReport)) {
+        try {
+            $notifyUserId = (int)$beforeReport['user_id'];
+            $notifyWorkDate = (string)$beforeReport['work_date'];
+            $afterReport = fetchWorkReportNotificationRow($dbh, $notifyUserId, $notifyWorkDate);
+            notifyWorkReportReimburseChange($dbh, $notifyUserId, $notifyWorkDate, $beforeReport, $afterReport, false);
+        } catch (Throwable $mailError) {
+            error_log('[t_work_reports/update notify] ' . $mailError->getMessage());
+        }
+    }
 
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode([
