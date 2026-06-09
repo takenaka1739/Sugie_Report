@@ -119,7 +119,7 @@ try {
         finish_time TIME DEFAULT NULL COMMENT '退社時刻',
         on_site_id INT(11) DEFAULT NULL COMMENT '現場ID (m_on_sites.id)',
         work TEXT DEFAULT NULL COMMENT '作業内容',
-        is_canceled TINYINT(1) NOT NULL DEFAULT 0 COMMENT '中止フラグ (0=通常,1=中止)',
+        is_canceled TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '勤怠種別 (0=出勤,1=雨天中止,2=業務都合休暇,3=自己都合休暇)',
         alcohol_checked TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'アルコールチェック',
         condition_checked TINYINT(1) NOT NULL DEFAULT 0 COMMENT '体調チェック',
         vehicle_id INT(11) DEFAULT NULL COMMENT '車両ID (m_vehicles.id)',
@@ -147,7 +147,7 @@ try {
     $dbh->exec("ALTER TABLE t_work_reports ADD COLUMN IF NOT EXISTS work TEXT DEFAULT NULL COMMENT '作業内容' AFTER on_site_id");
     $dbh->exec("ALTER TABLE t_work_reports ADD INDEX IF NOT EXISTS idx_on_site (on_site_id)");
     $dbh->exec("ALTER TABLE t_work_reports ADD INDEX IF NOT EXISTS idx_vehicle (vehicle_id)");
-    $dbh->exec("ALTER TABLE t_work_reports MODIFY COLUMN is_canceled TINYINT(1) NOT NULL DEFAULT 0 COMMENT '中止フラグ (0=通常,1=中止)'");
+    $dbh->exec("ALTER TABLE t_work_reports MODIFY COLUMN is_canceled TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '勤怠種別 (0=出勤,1=雨天中止,2=業務都合休暇,3=自己都合休暇)'");
 
     $dbh->exec("CREATE INDEX IF NOT EXISTS idx_work_reports_user_date ON t_work_reports (user_id, work_date)");
     $dbh->exec("CREATE INDEX IF NOT EXISTS idx_pl_user_date ON t_paid_leaves (user_id, leave_date)");

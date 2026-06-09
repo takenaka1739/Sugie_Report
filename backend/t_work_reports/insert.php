@@ -19,6 +19,12 @@ function norm_bool01($v) {
     if (is_string($v) && strtolower($v) === 'true') return 1;
     return 0;
 }
+function norm_work_type($v) {
+    if ($v === '' || $v === null || !isset($v)) return 0;
+    if (!is_numeric($v)) return 0;
+    $n = (int)$v;
+    return ($n >= 0 && $n <= 3) ? $n : 0;
+}
 function norm_time_or_null($s) {
     if ($s === '' || $s === null || !isset($s)) return null;
     // 受け取りは "HH:MM" か "HH:MM:SS" を想定
@@ -86,7 +92,7 @@ try {
     $finish_time2      = norm_time_or_null($in['finish_time2'] ?? null);
     $work2             = norm_work_string($in['work2'] ?? '');
 
-    $is_canceled       = norm_bool01($in['is_canceled'] ?? 0);
+    $is_canceled       = norm_work_type($in['is_canceled'] ?? 0);
     $alcohol_checked   = norm_bool01($in['alcohol_checked'] ?? 0);
     $condition_checked = norm_bool01($in['condition_checked'] ?? 0);
     $is_night_shift    = norm_bool01($in['is_night_shift'] ?? 0);

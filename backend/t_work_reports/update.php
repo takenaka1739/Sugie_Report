@@ -50,6 +50,13 @@ function norm_bool01_or_null($v) {
     return null;
 }
 
+function norm_work_type_or_null($v) {
+    if ($v === '' || $v === null || !isset($v)) return null;
+    if (!is_numeric($v)) return null;
+    $n = (int)$v;
+    return ($n >= 0 && $n <= 3) ? $n : null;
+}
+
 function norm_time_or_null($s) {
     if ($s === '' || $s === null || !isset($s)) return null;
     if (preg_match('/^\d{2}:\d{2}(:\d{2})?$/', (string)$s)) {
@@ -134,7 +141,7 @@ try {
         'start_time'        => ['type' => 'time'],
         'finish_time'       => ['type' => 'time'],
 
-        'is_canceled'       => ['type' => 'bool01'],
+        'is_canceled'       => ['type' => 'work_type'],
         'alcohol_checked'   => ['type' => 'bool01'],
         'condition_checked' => ['type' => 'bool01'],
 
@@ -168,6 +175,7 @@ try {
         switch ($meta['type']) {
             case 'time':   $val = norm_time_or_null($raw); break;
             case 'bool01': $val = norm_bool01_or_null($raw); break;
+            case 'work_type': $val = norm_work_type_or_null($raw); break;
             case 'int':    $val = norm_int_or_null($raw); break;
             case 'v255':   $val = norm_varchar255_or_null($raw); break;
             default:       $val = null;

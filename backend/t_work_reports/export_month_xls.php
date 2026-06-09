@@ -8,6 +8,7 @@
  * 追加:
  *  - type=site : 現場別（A形式）※管理者のみ
  *  - type=date : 日付別（※管理者のみ）
+ *  - type=all_users : 全員分の作業日報（社員別シート）※管理者のみ
  *
  * 条件（複合可）:
  *  - cond_overtime=1    残業
@@ -187,6 +188,275 @@ function require_admin(PDO $dbh): array {
     json_out(403, ['success'=>false,'message'=>'権限がありません（管理者のみ）']);
   }
   return ['id'=>$uid, 'name'=>(string)($me['name'] ?? '')];
+}
+
+function work_type_label($value): string {
+  $labels = [
+    1 => '雨天中止',
+    2 => '業務都合休暇',
+    3 => '自己都合休暇',
+  ];
+  $n = (int)$value;
+  return $labels[$n] ?? '';
+}
+
+function make_sheet_title(string $name, string $fallback, array &$used): string {
+  $title = trim($name) !== '' ? trim($name) : $fallback;
+  $title = preg_replace('/[\[\]\:\*\?\/\\\\]/u', '', $title);
+  $title = $title === '' ? $fallback : $title;
+  $base = mb_substr($title, 0, 31);
+  $title = $base;
+  $n = 2;
+  while (isset($used[$title])) {
+    $suffix = ' '.$n;
+    $title = mb_substr($base, 0, 31 - mb_strlen($suffix)) . $suffix;
+    $n++;
+  }
+  $used[$title] = true;
+  return $title;
+}
+
+function build_user_month_rows(
+  PDO $dbh,
+  array $user,
+  string $dateFrom,
+  string $dateTo,
+  array $siteMap,
+  array $vehicleMap,
+  array $paymentMap
+): array {
+  $userId = (int)$user['id'];
+  $userName = (string)($user['name'] ?? '');
+  $localeType = ((int)($user['nationality_id'] ?? 1) === 2) ? 2 : 1;
+
+  $stmt = $dbh->prepare("
+    SELECT the_date, status
+    FROM t_calendars
+    WHERE locale_type = :lt AND the_date BETWEEN :f AND :t
+  ");
+  $stmt->bindValue(':lt', $localeType, PDO::PARAM_INT);
+  $stmt->bindValue(':f', $dateFrom);
+  $stmt->bindValue(':t', $dateTo);
+  $stmt->execute();
+  $holidayMap = [];
+  while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $holidayMap[(string)$r['the_date']] = (int)$r['status'];
+  }
+
+  $paidSet = [];
+  try {
+    $stp = $dbh->prepare("
+      SELECT leave_date
+      FROM t_paid_leaves
+      WHERE user_id = :uid AND leave_date BETWEEN :f AND :t
+    ");
+    $stp->bindValue(':uid', $userId, PDO::PARAM_INT);
+    $stp->bindValue(':f', $dateFrom);
+    $stp->bindValue(':t', $dateTo);
+    $stp->execute();
+    while ($p = $stp->fetch(PDO::FETCH_ASSOC)) {
+      if (!empty($p['leave_date'])) $paidSet[(string)$p['leave_date']] = true;
+    }
+  } catch (Throwable $e) { $paidSet = []; }
+
+  $stmt = $dbh->prepare("
+    SELECT
+      id, user_id, work_date,
+      start_time, finish_time,
+      start_time2, finish_time2,
+      on_site_id, on_site_id2,
+      work, work2,
+      is_canceled, alcohol_checked, condition_checked,
+      vehicle_id,
+      payment1_id, amount1,
+      payment2_id, amount2,
+      payment3_id, amount3,
+      payment4_id, amount4,
+      payment5_id, amount5,
+      created_at, updated_at
+    FROM t_work_reports
+    WHERE user_id = :uid AND work_date BETWEEN :df AND :dt
+    ORDER BY work_date ASC, id ASC
+  ");
+  $stmt->bindValue(':uid', $userId, PDO::PARAM_INT);
+  $stmt->bindValue(':df', $dateFrom);
+  $stmt->bindValue(':dt', $dateTo);
+  $stmt->execute();
+  $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+  $baseMap = [];
+  $cur = new DateTime($dateFrom);
+  $end = new DateTime($dateTo);
+  while ($cur <= $end) {
+    $d = $cur->format('Y-m-d');
+    $w = wday_ja($cur);
+
+    $kind = '';
+    if (!empty($paidSet[$d])) {
+      $kind = '有給休暇';
+    } else {
+      $hs = (int)($holidayMap[$d] ?? 0);
+      if ($hs === 1) $kind = '社内休日';
+      if ($hs === 2) $kind = '法定休日';
+    }
+
+    $baseMap[$d] = [
+      'date'=>$d,'wday'=>$w,'kind'=>$kind,
+      'start'=>'','finish'=>'','start2'=>'','finish2'=>'',
+      'canceled'=>'','alcohol'=>'','condition'=>'',
+      'site'=>'','site2'=>'',
+      'work'=>'','work2'=>'',
+      'vehicle'=>'',
+      'p1'=>'','a1'=>0,'p2'=>'','a2'=>0,'p3'=>'','a3'=>0,'p4'=>'','a4'=>0,'p5'=>'','a5'=>0,
+      'sum'=>0,
+      'holiday_status'=>(int)($holidayMap[$d] ?? 0),
+      'is_paid'=>!empty($paidSet[$d]) ? 1 : 0,
+    ];
+    $cur->modify('+1 day');
+  }
+
+  $sumExpense = 0;
+  foreach ($rows as $r) {
+    $d = (string)$r['work_date'];
+    if (!isset($baseMap[$d])) continue;
+
+    $amt = (int)($r['amount1'] ?? 0)
+         + (int)($r['amount2'] ?? 0)
+         + (int)($r['amount3'] ?? 0)
+         + (int)($r['amount4'] ?? 0)
+         + (int)($r['amount5'] ?? 0);
+    $sumExpense += $amt;
+
+    $siteLabel = '';
+    if ($r['on_site_id'] !== null && $r['on_site_id'] !== '') {
+      $sid = (int)$r['on_site_id'];
+      $siteLabel = $siteMap[$sid] ?? (string)$r['on_site_id'];
+    }
+
+    $siteLabel2 = '';
+    if ($r['on_site_id2'] !== null && $r['on_site_id2'] !== '') {
+      $sid2 = (int)$r['on_site_id2'];
+      $siteLabel2 = $siteMap[$sid2] ?? (string)$r['on_site_id2'];
+    }
+
+    $vehicleLabel = '';
+    if ($r['vehicle_id'] !== null && $r['vehicle_id'] !== '') {
+      $vid = (int)$r['vehicle_id'];
+      $vehicleLabel = $vehicleMap[$vid] ?? (string)$r['vehicle_id'];
+    }
+
+    $p1 = ($r['payment1_id'] !== null && $r['payment1_id'] !== '') ? ($paymentMap[(int)$r['payment1_id']] ?? (string)$r['payment1_id']) : '';
+    $p2 = ($r['payment2_id'] !== null && $r['payment2_id'] !== '') ? ($paymentMap[(int)$r['payment2_id']] ?? (string)$r['payment2_id']) : '';
+    $p3 = ($r['payment3_id'] !== null && $r['payment3_id'] !== '') ? ($paymentMap[(int)$r['payment3_id']] ?? (string)$r['payment3_id']) : '';
+    $p4 = ($r['payment4_id'] !== null && $r['payment4_id'] !== '') ? ($paymentMap[(int)$r['payment4_id']] ?? (string)$r['payment4_id']) : '';
+    $p5 = ($r['payment5_id'] !== null && $r['payment5_id'] !== '') ? ($paymentMap[(int)$r['payment5_id']] ?? (string)$r['payment5_id']) : '';
+
+    $baseMap[$d] = array_merge($baseMap[$d], [
+      'start'   => !empty($r['start_time']) ? substr((string)$r['start_time'], 0, 5) : '',
+      'finish'  => !empty($r['finish_time']) ? substr((string)$r['finish_time'], 0, 5) : '',
+      'start2'  => !empty($r['start_time2']) ? substr((string)$r['start_time2'], 0, 5) : '',
+      'finish2' => !empty($r['finish_time2']) ? substr((string)$r['finish_time2'], 0, 5) : '',
+      'canceled'  => work_type_label($r['is_canceled'] ?? 0),
+      'alcohol'   => (int)$r['alcohol_checked'] ? '済' : '',
+      'condition' => (int)$r['condition_checked'] ? '済' : '',
+      'site'      => $siteLabel,
+      'site2'     => $siteLabel2,
+      'work'      => (string)($r['work'] ?? ''),
+      'work2'     => (string)($r['work2'] ?? ''),
+      'vehicle'   => $vehicleLabel,
+      'p1'=>$p1,'a1'=>(int)($r['amount1'] ?? 0),
+      'p2'=>$p2,'a2'=>(int)($r['amount2'] ?? 0),
+      'p3'=>$p3,'a3'=>(int)($r['amount3'] ?? 0),
+      'p4'=>$p4,'a4'=>(int)($r['amount4'] ?? 0),
+      'p5'=>$p5,'a5'=>(int)($r['amount5'] ?? 0),
+      'sum'=>$amt,
+    ]);
+  }
+
+  $outRows = array_values($baseMap);
+  usort($outRows, function($a, $b) { return strcmp($a['date'], $b['date']); });
+
+  return ['userName'=>$userName, 'rows'=>$outRows, 'sumExpense'=>$sumExpense];
+}
+
+function write_user_month_sheet($sheet, string $userName, string $ym, array $outRows, int $sumExpense): void {
+  $sheet->setTitle($sheet->getTitle());
+  $title = sprintf('作業日報（%s / %s）', $userName, $ym);
+  $sheet->setCellValue('A1', $title);
+
+  $headers = [
+    '日付','曜','区分',
+    '出勤1','退勤1','出勤2','退勤2',
+    '中止','アルコール','体調',
+    '現場1','現場2',
+    '作業内容1','作業内容2',
+    '車両',
+    '支払1','金額1','支払2','金額2','支払3','金額3','支払4','金額4','支払5','金額5',
+    '合計(円)'
+  ];
+  $endCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+  $sheet->mergeCells("A1:{$endCol}1");
+  $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+  $sheet->fromArray([$headers], null, 'A3', true);
+
+  $widths = [
+    12,5,10,
+    8,8,8,8,
+    8,9,8,
+    18,18,
+    28,28,
+    12,
+    12,10,12,10,12,10,12,10,12,10,
+    12
+  ];
+  foreach ($widths as $i => $w) { $sheet->getColumnDimensionByColumn($i+1)->setWidth($w); }
+
+  $border = ['borders'=>['allBorders'=>['borderStyle'=>\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,'color'=>['rgb'=>'666666']]]];
+  $fillHoliday1 = ['fillType'=>\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,'startColor'=>['rgb'=>'D9F2FF']];
+  $fillHoliday2 = ['fillType'=>\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,'startColor'=>['rgb'=>'FFD6D0']];
+  $fillPaid = $fillHoliday2;
+  $fontSun = ['font'=>['color'=>['rgb'=>'DD3333']]];
+  $fontSat = ['font'=>['color'=>['rgb'=>'3367CC']]];
+
+  $rowIdx = 4;
+  foreach ($outRows as $r) {
+    $sheet->fromArray([[
+      $r['date'], $r['wday'], $r['kind'],
+      $r['start'], $r['finish'], $r['start2'], $r['finish2'],
+      $r['canceled'], $r['alcohol'], $r['condition'],
+      $r['site'], $r['site2'],
+      $r['work'], $r['work2'],
+      $r['vehicle'],
+      $r['p1'], $r['a1'], $r['p2'], $r['a2'], $r['p3'], $r['a3'], $r['p4'], $r['a4'], $r['p5'], $r['a5'],
+      $r['sum'],
+    ]], null, "A{$rowIdx}", true);
+
+    $range = "A{$rowIdx}:{$endCol}{$rowIdx}";
+    if (!empty($r['is_paid'])) {
+      $sheet->getStyle($range)->getFill()->applyFromArray($fillPaid);
+    } elseif ($r['holiday_status'] === 1) {
+      $sheet->getStyle($range)->getFill()->applyFromArray($fillHoliday1);
+    } elseif ($r['holiday_status'] === 2) {
+      $sheet->getStyle($range)->getFill()->applyFromArray($fillHoliday2);
+    }
+
+    if ($r['wday'] === '日') $sheet->getStyle("B{$rowIdx}")->applyFromArray($fontSun);
+    if ($r['wday'] === '土') $sheet->getStyle("B{$rowIdx}")->applyFromArray($fontSat);
+    $sheet->getStyle($range)->applyFromArray($border);
+    $rowIdx++;
+  }
+
+  $sheet->getStyle("A3:{$endCol}3")->applyFromArray($border);
+  $sheet->getStyle("A3:{$endCol}3")->getFont()->setBold(true);
+
+  $sheet->setCellValue("A{$rowIdx}", '合計');
+  $sumColIdx = count($headers);
+  $sumCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($sumColIdx);
+  $mergeEndCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($sumColIdx - 1);
+  $sheet->mergeCells("A{$rowIdx}:{$mergeEndCol}{$rowIdx}");
+  $sheet->setCellValue("{$sumCol}{$rowIdx}", (int)$sumExpense);
+  $sheet->getStyle("A{$rowIdx}:{$endCol}{$rowIdx}")->applyFromArray($border);
+  $sheet->getStyle("A{$rowIdx}")->getFont()->setBold(true);
 }
 
 try {
@@ -383,7 +653,7 @@ try {
         'finish'  => $ft  ? substr($ft, 0, 5)  : '',
         'start2'  => $st2 ? substr($st2, 0, 5) : '',
         'finish2' => $ft2 ? substr($ft2, 0, 5) : '',
-        'canceled'  => (int)$r['is_canceled'] ? '中止' : '',
+        'canceled'  => work_type_label($r['is_canceled'] ?? 0),
         'alcohol'   => (int)$r['alcohol_checked'] ? '済' : '',
         'condition' => (int)$r['condition_checked'] ? '済' : '',
         'site'      => $siteLabel,
@@ -401,7 +671,7 @@ try {
     }
 
     $outRows = array_values($baseMap);
-    usort($outRows, fn($a,$b)=>strcmp($a['date'],$b['date']));
+    usort($outRows, function($a, $b) { return strcmp($a['date'], $b['date']); });
 
     // ===== XLSX =====
     if (hasSpreadsheet()) {
@@ -587,8 +857,53 @@ try {
     exit;
   }
 
-  /** ======= type=site / type=date（管理者のみ） ======= */
+  /** ======= type=all_users / type=site / type=date（管理者のみ） ======= */
   $me = require_admin($dbh);
+
+  if ($type === 'all_users') {
+    if (!hasSpreadsheet()) json_out(500, ['success'=>false,'message'=>'PhpSpreadsheet が必要です（全員分出力）']);
+
+    $vehicleMap = fetch_map($dbh, [
+      "SELECT id, COALESCE(number, name, plate_number) AS label FROM m_vehicles",
+    ]);
+    $paymentMap = fetch_map($dbh, [
+      "SELECT id, name AS label FROM m_payments",
+      "SELECT id, name AS label FROM m_payment_kinds",
+    ]);
+
+    $stmt = $dbh->prepare("
+      SELECT id, name, COALESCE(nationality_id,1) AS nationality_id
+      FROM m_users
+      WHERE retiremented_on IS NULL OR retiremented_on >= :date_from
+      ORDER BY id ASC
+    ");
+    $stmt->bindValue(':date_from', $dateFrom);
+    $stmt->execute();
+    $users = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    if (!$users) json_out(404, ['success'=>false,'message'=>'対象社員が見つかりません']);
+
+    $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+    $ss->getProperties()->setCreator('Report System')->setTitle("WorkReport ALL {$ym}");
+
+    $usedTitles = [];
+    foreach ($users as $idx => $user) {
+      $sheet = ($idx === 0) ? $ss->getActiveSheet() : $ss->createSheet();
+      $sheetTitle = make_sheet_title((string)($user['name'] ?? ''), 'user'.(string)($user['id'] ?? ($idx + 1)), $usedTitles);
+      $sheet->setTitle($sheetTitle);
+
+      $data = build_user_month_rows($dbh, $user, $dateFrom, $dateTo, $siteMap, $vehicleMap, $paymentMap);
+      write_user_month_sheet($sheet, $data['userName'], $ym, $data['rows'], (int)$data['sumExpense']);
+    }
+    $ss->setActiveSheetIndex(0);
+
+    $filenameUtf8  = "作業日報_全員分_{$ym}.xlsx";
+    $filenameAscii = "work_report_all_users_{$ym}.xlsx";
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="'.$filenameAscii.'"; filename*=UTF-8\'\''.rawurlencode($filenameUtf8));
+    header('Cache-Control: max-age=0');
+    (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($ss))->save('php://output');
+    exit;
+  }
 
   // shifts（全ユーザー用）
   $uRows = $dbh->query("SELECT id, name, shift_id FROM m_users ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC) ?: [];
