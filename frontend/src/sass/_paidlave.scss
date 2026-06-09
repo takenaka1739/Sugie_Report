@@ -1,0 +1,87 @@
+/* ============================================
+   PaidLeave（有給申請）ページ用（既存デザイン維持）
+   ============================================ */
+
+.paidleave {
+  .MuiPaper-root { padding: 16px; background: #fff; }
+  .MuiDivider-root { margin-block: 16px; }
+  .MuiChip-root { margin-right: 4px; margin-bottom: 4px; }
+
+  .MuiTableContainer-root {
+    max-height: 420px;
+    overflow: auto;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable both-edges;
+  }
+
+  .MuiTable-root { position: relative; }
+  .MuiTableHead-root .MuiTableRow-root > .MuiTableCell-root:nth-child(1) { white-space: nowrap; }
+  .MuiTableHead-root .MuiTableRow-root > .MuiTableCell-root:nth-child(2),
+  .MuiTableHead-root .MuiTableRow-root > .MuiTableCell-root:nth-child(3) { min-width: 100px; }
+
+  .MuiTableHead-root .MuiTableRow-root > .MuiTableCell-root:last-child,
+  .MuiTableBody-root .MuiTableRow-root > .MuiTableCell-root:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background: var(--mui-palette-background-paper, #fff);
+    width: 120px;
+    min-width: 120px;
+    white-space: nowrap;
+  }
+
+  .MuiTableHead-root .MuiTableCell-root {
+    position: sticky;
+    top: 0;
+    z-index: 4; /* 本文セルより前面に */
+    background: var(--mui-palette-background-paper, #fff);
+  }
+  /* 右端（操作）ヘッダーは右固定セルよりさらに前面 */
+  .MuiTableHead-root .MuiTableRow-root > .MuiTableCell-root:last-child {
+    z-index: 6;
+  }
+
+  /* ---- モバイル（～600px）だけの最適化 ---- */
+  @media (max-width: 600px) {
+    /* ▼ 画面いっぱいに広げる（親のpadding影響を無視） */
+    position: relative;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw;
+    margin-right: -50vw;
+    width: 100vw;
+    /* 上下の余白も打ち消し */
+    margin-top: -16px;
+    margin-bottom: -16px;
+    padding: 0 !important;
+    overflow-x: hidden;
+
+    /* Paper を端まで（影・角丸もオフ） */
+    .MuiPaper-root {
+      border-left: 0;
+      border-right: 0;
+      border-radius: 0;
+      box-shadow: none;
+      margin-top: 0;
+    }
+
+    /* 登録ボタンを全幅＆40px */
+    .MuiGrid2-root .MuiButton-contained { width: 100%; height: 40px; }
+
+    /* テーブル高さを少し低めに */
+    .MuiTableContainer-root { max-height: 360px; }
+
+    /* 操作列幅をやや狭める */
+    .MuiTableHead-root .MuiTableRow-root > .MuiTableCell-root:last-child,
+    .MuiTableBody-root .MuiTableRow-root > .MuiTableCell-root:last-child {
+      width: 80px;
+      min-width: 80px;
+    }
+  }
+}
+
+/* 休日ハイライト用のフック（必要ならJSXでclass付与） */
+.paidleave .pickers-holiday {
+  background-color: rgba(244, 67, 54, 0.12);
+}

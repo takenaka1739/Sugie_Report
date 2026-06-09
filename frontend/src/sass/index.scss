@@ -1,0 +1,8 @@
+/* @import は非推奨なので @use に移行（副作用読み込みとして as * を使用） */
+/* 取り込み順は従来どおり。最後の report を後勝ちにしたいので一番下に配置 */
+
+@use './app' as *;
+@use './header' as *;
+@use './master' as *;
+@use './calendar' as *;
+@use './report' as *;

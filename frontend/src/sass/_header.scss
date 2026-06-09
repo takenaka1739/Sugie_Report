@@ -1,0 +1,95 @@
+.drawer-item a {
+  color: #333;
+}
+
+/* ヘッダー自体はクリップしない */
+#header {
+  position: relative;
+  overflow: visible;
+  z-index: 100;
+}
+
+#g-nav {
+  background-color: #b99;
+  padding: 15px 5vh;
+  z-index: 100;
+}
+
+#g-nav-openbtn {
+  display: none;
+}
+
+/* アイコンの色とサイズ（ボタン内で常に中央） */
+#g-nav-icon {
+  color: #fff;
+  font-size: 28px;      /* 50px ボタンに対する標準サイズ */
+  display: block;       /* 余白の影響を受けないよう block */
+  line-height: 1;       /* アイコン自身の行高リセット */
+}
+
+/* Drawer はボタンより下、コンテンツより上に */
+#g-nav-drawer {
+  z-index: 1100;
+}
+
+@media screen and (max-width:1200px) {
+  #g-nav {
+    display: none;
+  }
+
+  #g-nav-openbtn {
+    display: block;
+    position: fixed;
+    z-index: 1300;
+
+    top: 10px;
+
+    /* 右端で見切れない：基本 8px、notch は margin-right で“足すだけ” */
+    right: 8px !important;
+    margin-right: env(safe-area-inset-right, 0px);
+
+    /*  IconButton 既定の padding でズレるのを防ぐ */
+    padding: 0 !important;
+    line-height: 1;
+
+    /*  中央配置を強制 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    box-shadow: 0 2px 6px rgba(0,0,0,.25);
+
+    -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+    overflow: visible; /* 影が欠けないよう保険 */
+  }
+}
+
+@media screen and (max-width:900px) {
+  #g-nav-openbtn {
+    right: 8px !important;
+    margin-right: env(safe-area-inset-right, 0px);
+
+    width: 44px;   /* 狭幅時は少し小さく */
+    height: 44px;
+  }
+
+  /* ボタンサイズに合わせてアイコンも小さく */
+  #g-nav-icon {
+    font-size: 24px;
+  }
+}
+
+#adminbtn {
+  display: block;
+  position: fixed;
+  z-index: 100;
+  top: 10px;
+  left: 10px;
+  cursor: pointer;
+  width: 50px;
+  height: 50px;
+}

@@ -1,0 +1,204 @@
+/* ===========================
+   Calendar (SCSS revert style)
+   JSは現状のまま / 見た目のみ調整
+   =========================== */
+
+/* ---- グローバル変更は撤去（ページ灰背景など） ---- */
+/* html, body, #root への背景指定や overflow 指定はしない */
+/* #calendar-page / #calendar-paper の過度な上書きもしない */
+
+/* ===========================
+   色・寸法の定義（最小限）
+   =========================== */
+$color-divider:   #e0e0e0;
+$color-sunday:    #d32f2f;
+$color-saturday:  #1976d2;
+$color-weekhead:  #e3f2fd;
+$color-hover:     rgba(0,0,0,0.04);
+$title-bg:        #333;
+$title-fg:        #fff;
+
+$head-h:          32px;
+$cell-min-h-sm:   56px;  /* ~sm */
+$cell-min-h-md:   72px;  /* md~ */
+$pad-x:           8px;
+
+/* ===========================
+   カレンダー外枠（Paper相当）
+   =========================== */
+#calendar-paper {
+  background: #fff;
+  border: 1px solid $color-divider;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  padding: 12px;
+  @media (min-width: 900px) {
+    padding: 16px 20px;
+  }
+}
+
+/* ▼ モバイル時は“完全横いっぱい”に
+   - 100vw はスクロールバー幅を含んで横はみ出しになりやすいので不採用
+   - 左右は「calc(50% - 50vw)」で親ガターを相殺
+   - 上端の灰背景が見えないよう、わずかに上/下のマージンも相殺
+*/
+@media (max-width: 600px) {
+  #calendar-page {
+    /* 左右の親paddingを相殺してビューポートいっぱいに見せる */
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+
+    /* 上端/下端に親の余白があるケースを軽く相殺（必要に応じて数値微調整） */
+    margin-top: -8px;
+    margin-bottom: -8px;
+
+    /* まれな横スクロールの発生を防ぐ */
+    overflow-x: clip; /* Chrome/Edge/Firefox で有効（古いブラウザは無視されても実害なし） */
+  }
+
+  #calendar-paper {
+    /* 端まで白を広げるため左右の装飾を外す */
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+    box-shadow: none;
+
+    /* 内側にだけ適度な左右余白を確保（お好みで調整可） */
+    padding-left: 12px;
+    padding-right: 12px;
+    /* 上下の余白は既定のまま（デザイン保持） */
+  }
+}
+
+/* ===========================
+   1ヶ月カード（JSの className と合わせる）
+   =========================== */
+.calendar-month {
+  background: #fff;
+  border-radius: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- 月タイトル（年表記なし / 太字・ダーク帯） ---- */
+.calendar-title {
+  margin: 0;
+  padding-left: 12px;
+  height: 28px;
+  line-height: 28px;
+  font-weight: 600;
+  color: $title-fg;
+  background: $title-bg;
+}
+
+/* ---- テーブルレイアウト（曜日 → 日付セル） ---- */
+.calendar-table-container { flex: 1 1 auto; overflow-x: hidden; }
+.calendar-table {
+  table-layout: fixed;
+  width: 100%;
+  border-collapse: collapse;
+
+  th, td { padding: 0; }
+}
+
+/* 曜日ヘッダー */
+.calendar-week-head {
+  background: $color-weekhead;
+  border-bottom: 1px solid $color-divider;
+  height: $head-h;
+
+  .calendar-week-head-cell {
+    border-right: 1px solid $color-divider;
+
+    &:last-child { border-right: 0; }
+
+    .calendar-week-head-text {
+      margin: 0;
+      height: $head-h;
+      line-height: $head-h;
+      font-weight: 700;
+      color: #000;
+      text-align: center;
+      font-size: 12px;
+    }
+
+    &.is-sun .calendar-week-head-text { color: $color-sunday; }
+    &.is-sat .calendar-week-head-text { color: $color-saturday; }
+  }
+}
+
+
+.calendar-cell {
+  border-right: 1px solid $color-divider;
+  border-bottom: 1px solid $color-divider;
+
+  &:last-child { border-right: 0; }
+
+  .calendar-cell-inner {
+    width: 100%; height: 100%; box-sizing: border-box;
+    min-height: $cell-min-h-sm;
+    display: flex; flex-direction: column;
+    align-items: flex-start; justify-content: center;
+    padding: 0 $pad-x;
+    position: relative;
+
+    /* 管理者は hover 表示・ポインタ */
+    &.is-admin { cursor: pointer; &:hover { background: $color-hover; } }
+
+    @media (min-width: 900px) {
+      min-height: $cell-min-h-md;
+    }
+  }
+
+  /* 左上の日付数字（週末色） */
+  .calendar-day-number {
+    margin: 0;
+    font-weight: 700;
+    line-height: 1.2;
+    position: absolute;
+    top: 6px; left: 8px;
+    font-size: 12px;
+
+    &.is-sun { color: $color-sunday; }
+    &.is-sat { color: $color-saturday; }
+  }
+
+  /* 休日ラベルはテキストのみ（枠線/塗り潰しなし） */
+  .calendar-label {
+    display: block;
+    line-height: 1.2;
+    min-height: 1.2em;   /* 空でも高さ確保してガタつき防止 */
+    margin-top: 18px;    /* 日付数字と距離を空ける */
+
+    &--company   { color: $color-saturday; } /* 社内休日=青系 */
+    &--statutory { color: $color-sunday;   } /* 法定休日=赤系 */
+  }
+}
+
+/* 最終行の下線ダブり防止 */
+.calendar-body tr:last-of-type {
+  td, th { border-bottom: 0; }
+}
+
+/* 祝日：日付（数字）だけ赤 */
+.calendar-day-number.is-holiday {
+  color: #d32f2f; /* MUIのerror系に近い赤 */
+}
+
+/* ===========================
+   コンパクト時の調整（フォント落とす程度）
+   =========================== */
+@media (max-width: 420px) {
+  .calendar-day-number { font-size: 11px; top: 5px; left: 7px; }
+  .calendar-label { margin-top: 14px; font-size: 12px; }
+}
+
+@media (max-width: 360px) {
+  .calendar-day-number { font-size: 10.5px; top: 4px; left: 6px; }
+  .calendar-label { margin-top: 12px; font-size: 11.5px; }
+}
+
+@media (max-width: 320px) {
+  .calendar-day-number { font-size: 10px; top: 4px; left: 6px; }
+  .calendar-label { margin-top: 10px; font-size: 11px; }
+}
