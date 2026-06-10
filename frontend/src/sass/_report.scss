@@ -191,6 +191,92 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ===== 日報編集ダイアログ ===== */
+.report-edit-work-type-row {
+  min-height: 40px;
+  margin-top: -4px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: nowrap;
+
+  @media (max-width: 599.98px) {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
+}
+
+.report-edit-work-type-group {
+  column-gap: 14px;
+  row-gap: 4px;
+  align-items: center;
+
+  .MuiFormControlLabel-root {
+    min-height: 40px;
+    margin: 0;
+    align-items: center;
+  }
+
+  .MuiRadio-root {
+    padding: 4px;
+    margin-right: 2px;
+  }
+
+  .MuiFormControlLabel-label {
+    line-height: 1.35;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 599.98px) {
+    column-gap: 10px;
+  }
+}
+
+.report-edit-night-shift {
+  min-height: 40px;
+  margin: 0;
+  padding-left: 12px;
+  margin-left: 4px;
+  border-left: 1px solid rgba(0,0,0,0.12);
+  align-items: center;
+
+  .MuiCheckbox-root {
+    padding: 4px;
+    margin-right: 2px;
+  }
+
+  .MuiFormControlLabel-label {
+    line-height: 1.35;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 599.98px) {
+    padding-left: 0;
+    margin-left: 0;
+    border-left: 0;
+  }
+}
+
+.report-edit-section-title {
+  margin-bottom: 8px;
+}
+
+.report-edit-check-row {
+  .MuiFormControlLabel-root {
+    min-height: 40px;
+    margin: -4px 0 0;
+    align-items: center;
+  }
+
+  .MuiCheckbox-root {
+    padding: 4px;
+  }
+
+  .MuiFormControlLabel-label {
+    line-height: 1.4;
+  }
+}
+
 /* ===== 左固定（日/曜）：横方向固定＋不透明塗り ===== */
 
 $cell-bg: var(--mui-palette-background-paper, #fff);

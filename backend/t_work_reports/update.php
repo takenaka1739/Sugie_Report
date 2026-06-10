@@ -91,12 +91,18 @@ function norm_varchar255_or_null($v) {
 // 列存在チェック（失敗しても落とさない）
 function has_column(PDO $dbh, string $table, string $column): bool {
     try {
-        $sql = "SHOW COLUMNS FROM `{$table}` LIKE :col";
+        $sql = "
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table
+              AND COLUMN_NAME = :col
+        ";
         $st = $dbh->prepare($sql);
+        $st->bindValue(':table', $table, PDO::PARAM_STR);
         $st->bindValue(':col', $column, PDO::PARAM_STR);
         $st->execute();
-        $row = $st->fetch(PDO::FETCH_ASSOC);
-        return !!$row;
+        return ((int)$st->fetchColumn()) > 0;
     } catch (Throwable $e) {
         return false;
     }

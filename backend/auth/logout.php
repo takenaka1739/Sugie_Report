@@ -12,6 +12,7 @@
  *  - no-store ヘッダ付与
  */
 
+require_once dirname(__DIR__, 1) . '/common/session.php';
 require_once dirname(__DIR__, 1) . '/common/db_manager.php';
 
 const SESSION_NAME  = 'REPORTSESSID';
@@ -73,8 +74,7 @@ try {
   }
 
   // 既存セッションを開く（同名必須）
-  session_name(SESSION_NAME);
-  if (session_status() === PHP_SESSION_NONE) session_start();
+  report_start_session();
 
   $sid = session_id();
   auth_log('logout request', [
@@ -96,8 +96,8 @@ try {
   }
 
   // あり得る path すべてを失効（過去に '/' で発行されていたケースも潰す）
-  $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
-  $paths  = ['/Report/backend/', '/Report/backend', '/Report/', '/Report', '/'];
+  $secure = report_session_is_secure();
+  $paths  = ['/Report/backend/', '/Report/backend', '/Report/', '/Report', '/report/backend/', '/report/backend', '/report/', '/report', '/'];
   // domain 無し（Host-only cookie）と、localhost 指定の両方で消す
   foreach ($paths as $p) {
     expire_cookie(SESSION_NAME, $p, null,       $secure, 'Lax');

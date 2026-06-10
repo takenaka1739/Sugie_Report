@@ -41,15 +41,8 @@ const ReportTable = ({
     return val;
   };
 
-  // 夜勤フラグ（どの形で来ても吸収）
   const isNightShiftOn = (row) => {
-    const ns = row?.is_night_shift ?? row?.night_shift ?? row?.night ?? 0;
-    return (
-      ns === 1 ||
-      ns === true ||
-      ns === '1' ||
-      (typeof ns === 'string' && ns.toLowerCase() === 'true')
-    );
+    return Number(row?.is_night_shift ?? 0) === 1;
   };
 
   const columns = [

@@ -117,21 +117,7 @@ function verify_password_compat(string $plain, string $stored): bool {
 
 try {
   /* ==== セッション ==== */
-  if (session_status() === PHP_SESSION_NONE) {
-    session_name(SESSION_NAME);
-    $cookieParams = session_get_cookie_params();
-    $newCookieParams = [
-      'lifetime' => 86400 * 30,   // 30日間はログインを維持（0の場合は夜間の省電力処理でのブラウザ再起動で Cookie が消える）
-      'path'     => '/report',    // 小文字に統一
-      'domain'   => $cookieParams['domain'] ?? '',
-      'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on'),
-      'httponly' => true,
-      'samesite' => 'None',       // iPhone Safari は samesite=Lax の Cookie を１日以内に勝手に削除するため None にする
-    ];
-    if (PHP_VERSION_ID >= 70300) session_set_cookie_params($newCookieParams);
-    else session_set_cookie_params($newCookieParams['lifetime'],$newCookieParams['path'],$newCookieParams['domain'],$newCookieParams['secure'],$newCookieParams['httponly']);
-    session_start();
-  }
+  report_start_session();
 
   /* ==== 入力 ==== */
   $raw = file_get_contents('php://input') ?: '';

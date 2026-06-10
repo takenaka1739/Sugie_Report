@@ -63,30 +63,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
 }
 
 /** ===== セッション ===== */
-if (session_status() === PHP_SESSION_NONE) {
-    session_name(SESSION_NAME);
-    $cookieParams = session_get_cookie_params();
-    $newCookieParams = [
-        'lifetime' => 0,
-        'path'     => '/report', //  小文字に統一（本番配下に合わせる）
-        'domain'   => $cookieParams['domain'] ?? '',
-        'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on'),
-        'httponly' => true,
-        'samesite' => 'Lax',
-    ];
-    if (PHP_VERSION_ID >= 70300) {
-        session_set_cookie_params($newCookieParams);
-    } else {
-        session_set_cookie_params(
-            $newCookieParams['lifetime'],
-            $newCookieParams['path'],
-            $newCookieParams['domain'],
-            $newCookieParams['secure'],
-            $newCookieParams['httponly']
-        );
-    }
-    session_start();
-}
+report_start_session();
 
 auth_log('user.php request', [
     'origin'       => $reqOrigin,

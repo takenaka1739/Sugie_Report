@@ -85,27 +85,6 @@ const pickSecondSiteId = (src) => {
   return (v === '' || v == null) ? null : Number(v);
 };
 
-// 追加：夜勤フラグの取り出し（キー揺れ吸収）
-const pickNightShiftFlag = (src) => {
-  if (!src) return 0;
-  const v =
-    src.is_night_shift ??
-    src.night_shift ??
-    src.night ??
-    src.isNightShift ??
-    null;
-
-  if (v === null || v === undefined || v === '') return 0;
-  if (v === true) return 1;
-  const n = Number(v);
-  if (Number.isFinite(n)) return n ? 1 : 0;
-  if (typeof v === 'string') {
-    const s = v.trim().toLowerCase();
-    if (s === 'true' || s === '1' || s === 'yes' || s === 'ok') return 1;
-  }
-  return 0;
-};
-
 // ===== 追加：有休メッセージ用ヘルパ =====
 const toIntOrNull = (v) => {
   if (v == null || v === '') return null;
@@ -476,8 +455,7 @@ const ReportPage = () => {
         baseRow.on_site_id  = r.on_site_id ?? null;
         baseRow.on_site_id2 = pickSecondSiteId(r);
 
-        // 追加：夜勤（キー揺れ吸収）
-        baseRow.is_night_shift = pickNightShiftFlag(r);
+        baseRow.is_night_shift = Number(r.is_night_shift ?? 0) ? 1 : 0;
 
         baseRow.vehicle_id  = r.vehicle_id ?? null;
         baseRow.payment1_id = r.payment1_id ?? null; baseRow.payment2_id = r.payment2_id ?? null;

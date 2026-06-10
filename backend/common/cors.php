@@ -6,6 +6,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/session.php';
+
 $__LOG_DIR = dirname(__DIR__, 1) . '/_logs';
 if (!is_dir($__LOG_DIR)) {
     @mkdir($__LOG_DIR, 0775, true);
@@ -74,12 +76,7 @@ if ($__REQ_METHOD === 'OPTIONS') {
     exit;
 }
 
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    if (!empty($_COOKIE['REPORTSESSID'])) {
-        session_name('REPORTSESSID');
-    }
-    @session_start();
-}
+report_start_session();
 
 set_error_handler(function (int $severity, string $message, string $file, int $line): bool {
     if (!(error_reporting() & $severity)) {
