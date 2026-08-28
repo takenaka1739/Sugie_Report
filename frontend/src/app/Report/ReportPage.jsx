@@ -616,6 +616,13 @@ const ReportPage = () => {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  const handleExportAttendanceBook = () => {
+    if (!monthValue) return;
+    const ym = monthValue.format('YYYY-MM');
+    const url = `${API_BASE}/t_work_reports/export_attendance_book_xls.php?ym=${ym}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   if (isLoadingMe) {
     return (
       <Box className="report-loading">
@@ -691,6 +698,7 @@ const ReportPage = () => {
               isAdmin={isAdmin}
               onExportMyMonth={handleExportMyMonth}
               onExportSummary={handleExportSummary}
+              onExportAttendanceBook={handleExportAttendanceBook}
               disableExportMy={!selectedUser?.id && !isAdmin}
               loading={loadingSelectedShift}
               paidLeaveMessage={paidLeaveMessage}

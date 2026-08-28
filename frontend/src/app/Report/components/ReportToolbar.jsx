@@ -15,6 +15,7 @@ const ReportToolbar = ({
   isAdmin,
   onExportMyMonth,
   onExportSummary,
+  onExportAttendanceBook,
   disableExportMy = false,
   loading = false,
 
@@ -142,22 +143,41 @@ const ReportToolbar = ({
         </Button>
 
         {isAdmin && (
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<SummarizeIcon />}
-            onClick={onExportSummary}
-            disabled={loading}
-            sx={{
-              mx: { xs: 0, sm: 0.5 },
-              mt: { xs: 0.5, sm: 0 },
-              width: { xs: '100%', sm: 'auto' },
-              minWidth: { xs: 44, sm: 64 },
-              whiteSpace: 'nowrap',
-            }}
-          >
-            当月集計をエクセル出力
-          </Button>
+          <>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<SummarizeIcon />}
+              onClick={onExportSummary}
+              disabled={loading}
+              sx={{
+                mx: { xs: 0, sm: 0.5 },
+                mt: { xs: 0.5, sm: 0 },
+                width: { xs: '100%', sm: 'auto' },
+                minWidth: { xs: 44, sm: 64 },
+                whiteSpace: 'nowrap',
+              }}
+            >
+              当月集計をエクセル出力
+            </Button>
+
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<FileDownloadIcon />}
+              onClick={onExportAttendanceBook}
+              disabled={loading}
+              sx={{
+                mx: { xs: 0, sm: 0.5 },
+                mt: { xs: 0.5, sm: 0 },
+                width: { xs: '100%', sm: 'auto' },
+                minWidth: { xs: 44, sm: 64 },
+                whiteSpace: 'nowrap',
+              }}
+            >
+              出勤簿をエクセル出力
+            </Button>
+          </>
         )}
       </Stack>
     </Box>
